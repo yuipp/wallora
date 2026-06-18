@@ -38,7 +38,11 @@ fun EmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ErrorState(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+fun ErrorState(
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    message: String? = null,
+) {
     Column(
         modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -49,6 +53,15 @@ fun ErrorState(onRetry: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.state_error), style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center)
+        if (!message.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(onClick = onRetry) { Text(stringResource(R.string.state_retry)) }
     }

@@ -158,6 +158,10 @@
     <string name="settings_api_wallhaven_hint">wallhaven.cc/settings/account — unlocks higher limits</string>
     <string name="settings_api_pixabay_label">Pixabay API key</string>
     <string name="settings_api_pixabay_hint">Free key at pixabay.com/api/docs</string>
+    <string name="settings_api_flickr_label">Flickr API key</string>
+    <string name="settings_api_flickr_hint">Free non-commercial key at flickr.com/services/apps/create</string>
+    <string name="settings_api_reddit_label">Reddit client ID</string>
+    <string name="settings_api_reddit_hint">Register a free installed app at reddit.com/prefs/apps</string>
     <string name="settings_api_key_configured">Key configured</string>
     <string name="settings_api_key_save">Save</string>
     <string name="settings_api_key_clear">Clear</string>
@@ -216,7 +220,7 @@
     <string name="settings_developer_name">Sayantan Das</string>
     <string name="settings_github">GitHub</string>
     <string name="settings_credits_title">Photo credits</string>
-    <string name="settings_credits_desc">Photos from Pexels · Wallhaven · Unsplash · Reddit · Pixabay. Attribution per each source\'s license.</string>
+    <string name="settings_credits_desc">Photos from Pexels · Wallhaven · Unsplash · Reddit · Pixabay · Openverse · NASA · Flickr · Wikimedia Commons. Attribution per each source\'s license.</string>
 
     <!-- Settings — Appearance popup -->
     <string name="settings_theme_title">Choose theme</string>

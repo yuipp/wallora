@@ -7,4 +7,8 @@ enum class SourceId(val displayName: String) {
     REDDIT("Reddit"),
     UNSPLASH("Unsplash"),
     PIXABAY("Pixabay"),
+    OPENVERSE("Openverse"),
+    NASA("NASA"),
+    FLICKR("Flickr"),
+    WIKIMEDIA("Wikimedia"),
 }

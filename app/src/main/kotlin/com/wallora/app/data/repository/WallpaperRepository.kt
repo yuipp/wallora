@@ -38,6 +38,7 @@ class WallpaperRepository @Inject constructor(
     fun browse(
         categories: List<Category>,
         enabledSources: Set<SourceId>,
+        userSubreddits: List<String> = emptyList(),
     ): Flow<PagingData<Wallpaper>> {
         val activeSources = sources.filter { it.isConfigured && it.id in enabledSources }
         return Pager(
@@ -53,6 +54,7 @@ class WallpaperRepository @Inject constructor(
                     query = null,
                     wallpaperDao = wallpaperDao,
                     cacheTtlMs = CACHE_TTL_MS,
+                    userSubreddits = userSubreddits,
                 )
             },
         ).flow

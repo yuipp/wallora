@@ -43,9 +43,15 @@ class HomeViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val wallpapers: Flow<PagingData<Wallpaper>> =
-        combine(selectedCategories, enabledSources) { cats, sources -> cats to sources }
-            .flatMapLatest { (cats, sources) ->
-                repository.browse(cats.toList(), sources)
+        combine(
+            selectedCategories,
+            enabledSources,
+            settingsRepo.userSubreddits,
+        ) { cats, sources, subs ->
+            Triple(cats, sources, subs)
+        }
+            .flatMapLatest { (cats, sources, subs) ->
+                repository.browse(cats.toList(), sources, subs)
             }
             .cachedIn(viewModelScope)
 

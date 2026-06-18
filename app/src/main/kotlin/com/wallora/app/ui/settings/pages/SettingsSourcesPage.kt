@@ -37,6 +37,8 @@ fun SettingsSourcesPage(
     val userUnsplashKey by vm.userUnsplashKey.collectAsStateWithLifecycle()
     val userWallhavenKey by vm.userWallhavenKey.collectAsStateWithLifecycle()
     val userPixabayKey by vm.userPixabayKey.collectAsStateWithLifecycle()
+    val userFlickrKey by vm.userFlickrKey.collectAsStateWithLifecycle()
+    val userRedditClientId by vm.userRedditClientId.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
@@ -110,6 +112,18 @@ fun SettingsSourcesPage(
                 hint = stringResource(R.string.settings_api_pixabay_hint),
                 currentKey = userPixabayKey,
                 onSave = vm::saveUserPixabayKey,
+            )
+            ApiKeyField(
+                label = stringResource(R.string.settings_api_flickr_label),
+                hint = stringResource(R.string.settings_api_flickr_hint),
+                currentKey = userFlickrKey,
+                onSave = vm::saveUserFlickrKey,
+            )
+            ApiKeyField(
+                label = stringResource(R.string.settings_api_reddit_label),
+                hint = stringResource(R.string.settings_api_reddit_hint),
+                currentKey = userRedditClientId,
+                onSave = vm::saveUserRedditClientId,
             )
         }
     }

@@ -13,6 +13,7 @@ import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.EditParams
 import com.wallora.app.domain.model.SourceId
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -202,16 +203,36 @@ class SettingsRepository @Inject constructor(
     private val userUnsplashKeyKey = stringPreferencesKey("user_unsplash_key")
     private val userWallhavenKeyKey = stringPreferencesKey("user_wallhaven_key")
     private val userPixabayKeyKey = stringPreferencesKey("user_pixabay_key")
+    private val userFlickrKeyKey = stringPreferencesKey("user_flickr_key")
+    private val userRedditClientIdKey = stringPreferencesKey("user_reddit_client_id")
+    private val redditDeviceIdKey = stringPreferencesKey("reddit_device_id")
 
     val userPexelsKey: Flow<String> = dataStore.data.map { it[userPexelsKeyKey] ?: "" }
     val userUnsplashKey: Flow<String> = dataStore.data.map { it[userUnsplashKeyKey] ?: "" }
     val userWallhavenKey: Flow<String> = dataStore.data.map { it[userWallhavenKeyKey] ?: "" }
     val userPixabayKey: Flow<String> = dataStore.data.map { it[userPixabayKeyKey] ?: "" }
+    val userFlickrKey: Flow<String> = dataStore.data.map { it[userFlickrKeyKey] ?: "" }
+    val userRedditClientId: Flow<String> = dataStore.data.map { it[userRedditClientIdKey] ?: "" }
 
     suspend fun setUserPexelsKey(key: String) = dataStore.edit { it[userPexelsKeyKey] = key }
     suspend fun setUserUnsplashKey(key: String) = dataStore.edit { it[userUnsplashKeyKey] = key }
     suspend fun setUserWallhavenKey(key: String) = dataStore.edit { it[userWallhavenKeyKey] = key }
     suspend fun setUserPixabayKey(key: String) = dataStore.edit { it[userPixabayKeyKey] = key }
+    suspend fun setUserFlickrKey(key: String) = dataStore.edit { it[userFlickrKeyKey] = key }
+    suspend fun setUserRedditClientId(clientId: String) =
+        dataStore.edit { it[userRedditClientIdKey] = clientId }
+
+    /**
+     * Returns the persisted per-install device ID for Reddit userless OAuth.
+     * Generates and persists a new UUID on first call (atomically via DataStore).
+     */
+    suspend fun getOrCreateRedditDeviceId(): String {
+        val existing = dataStore.data.map { it[redditDeviceIdKey] }.first()
+        if (!existing.isNullOrBlank()) return existing
+        val newId = java.util.UUID.randomUUID().toString()
+        dataStore.edit { it[redditDeviceIdKey] = newId }
+        return newId
+    }
 
     // ── User Reddit subreddits ───────────────────────────────────────────────
     private val userSubredditsKey = stringSetPreferencesKey("user_subreddits")

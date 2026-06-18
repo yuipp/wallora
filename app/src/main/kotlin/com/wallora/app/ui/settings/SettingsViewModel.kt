@@ -64,8 +64,18 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.userPexelsKey,
         settingsRepository.userUnsplashKey,
         settingsRepository.userPixabayKey,
-    ) { pexelsKey, unsplashKey, pixabayKey ->
-        configuredMap(userPexels = pexelsKey, userUnsplash = unsplashKey, userPixabay = pixabayKey)
+        settingsRepository.userFlickrKey,
+        settingsRepository.userRedditClientId,
+    ) { keys ->
+        @Suppress("UNCHECKED_CAST")
+        val k = keys as Array<String>
+        configuredMap(
+            userPexels = k[0],
+            userUnsplash = k[1],
+            userPixabay = k[2],
+            userFlickr = k[3],
+            userRedditClientId = k[4],
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), configuredMap())
 
     fun setSourceEnabled(source: SourceId, enabled: Boolean) = viewModelScope.launch {
@@ -73,20 +83,26 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * A source is configured when it needs no key (Wallhaven, Reddit) or when a key is present
-     * from BuildConfig or the user. User-key args default to blank so the same builder serves
-     * the StateFlow's initial value.
+     * A source is configured when it needs no key (Wallhaven, Openverse, NASA, Wikimedia) or
+     * when a key is present from BuildConfig or the user. User-key args default to blank so the
+     * same builder serves the StateFlow's initial value.
      */
     private fun configuredMap(
         userPexels: String = "",
         userUnsplash: String = "",
         userPixabay: String = "",
+        userFlickr: String = "",
+        userRedditClientId: String = "",
     ): Map<SourceId, Boolean> = mapOf(
         SourceId.PEXELS to (BuildConfig.PEXELS_API_KEY.isNotBlank() || userPexels.isNotBlank()),
         SourceId.UNSPLASH to (BuildConfig.UNSPLASH_ACCESS_KEY.isNotBlank() || userUnsplash.isNotBlank()),
         SourceId.WALLHAVEN to true,
-        SourceId.REDDIT to true,
+        SourceId.REDDIT to (BuildConfig.REDDIT_CLIENT_ID.isNotBlank() || userRedditClientId.isNotBlank()),
         SourceId.PIXABAY to (BuildConfig.PIXABAY_API_KEY.isNotBlank() || userPixabay.isNotBlank()),
+        SourceId.OPENVERSE to true,  // keyless
+        SourceId.NASA to true,       // keyless
+        SourceId.FLICKR to (BuildConfig.FLICKR_API_KEY.isNotBlank() || userFlickr.isNotBlank()),
+        SourceId.WIKIMEDIA to true,  // keyless
     )
 
     // ── Category defaults ─────────────────────────────────────────────────────
@@ -289,6 +305,14 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.userPixabayKey
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
+    val userFlickrKey: StateFlow<String> =
+        settingsRepository.userFlickrKey
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    val userRedditClientId: StateFlow<String> =
+        settingsRepository.userRedditClientId
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
     fun saveUserPexelsKey(key: String) = viewModelScope.launch {
         settingsRepository.setUserPexelsKey(key.trim())
         _events.emit(SettingsEvent.ShowMessage("Pexels key saved"))
@@ -307,6 +331,16 @@ class SettingsViewModel @Inject constructor(
     fun saveUserPixabayKey(key: String) = viewModelScope.launch {
         settingsRepository.setUserPixabayKey(key.trim())
         _events.emit(SettingsEvent.ShowMessage("Pixabay key saved"))
+    }
+
+    fun saveUserFlickrKey(key: String) = viewModelScope.launch {
+        settingsRepository.setUserFlickrKey(key.trim())
+        _events.emit(SettingsEvent.ShowMessage("Flickr key saved"))
+    }
+
+    fun saveUserRedditClientId(clientId: String) = viewModelScope.launch {
+        settingsRepository.setUserRedditClientId(clientId.trim())
+        _events.emit(SettingsEvent.ShowMessage("Reddit client ID saved"))
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────────

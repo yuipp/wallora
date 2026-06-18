@@ -3,6 +3,7 @@ package com.wallora.app.data.remote
 import com.wallora.app.data.remote.api.RedditApi
 import com.wallora.app.data.remote.dto.RedditPostData
 import com.wallora.app.data.repository.SettingsRepository
+import com.wallora.app.di.UserKeyCache
 import com.wallora.app.domain.WallpaperSource
 import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.Page
@@ -16,10 +17,13 @@ import javax.inject.Singleton
 class RedditSource @Inject constructor(
     private val api: RedditApi,
     private val settingsRepository: SettingsRepository,
+    private val userKeyCache: UserKeyCache,
 ) : WallpaperSource {
 
     override val id: SourceId = SourceId.REDDIT
-    override val isConfigured: Boolean = true
+
+    /** Configured when a Reddit client ID is set (via local.properties or Settings). */
+    override val isConfigured: Boolean get() = userKeyCache.effectiveRedditClientId.isNotBlank()
 
     override suspend fun browse(categories: List<Category>, page: String): Page<Wallpaper> {
         val after = page.takeIf { it != "1" }

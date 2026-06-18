@@ -25,8 +25,8 @@ android {
         applicationId = "com.wallora.app"
         minSdk = 31
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -39,6 +39,11 @@ android {
             "\"${localProps.getProperty("WALLHAVEN_API_KEY", "")}\"")
         buildConfigField("String", "PIXABAY_API_KEY",
             "\"${localProps.getProperty("PIXABAY_API_KEY", "")}\"")
+        buildConfigField("String", "FLICKR_API_KEY",
+            "\"${localProps.getProperty("FLICKR_API_KEY", "")}\"")
+        buildConfigField("String", "REDDIT_CLIENT_ID",
+            "\"${localProps.getProperty("REDDIT_CLIENT_ID", "")}\"")
+
 
         // Room schema export
         ksp {

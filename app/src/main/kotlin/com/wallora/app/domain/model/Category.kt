@@ -9,6 +9,10 @@ package com.wallora.app.domain.model
  * [subreddits] — list of SFW wallpaper subreddits for Reddit.
  * [unsplashQuery] — search term for Unsplash.
  * [pixabayQuery] — search term for Pixabay.
+ * [openverseQuery] — search term for Openverse (Creative Commons).
+ * [nasaQuery] — search term for NASA Image Library.
+ * [flickrQuery] — search term for Flickr (CC-licensed, safe-search).
+ * [wikimediaQuery] — search term for Wikimedia Commons File namespace.
  */
 enum class Category(
     val displayName: String,
@@ -18,6 +22,10 @@ enum class Category(
     val subreddits: List<String>,
     val unsplashQuery: String,
     val pixabayQuery: String,
+    val openverseQuery: String,
+    val nasaQuery: String,
+    val flickrQuery: String,
+    val wikimediaQuery: String,
 ) {
     // ---- Vibrant / high-saturation leads — shown first in the chip row ----
     VIBRANT(
@@ -28,6 +36,10 @@ enum class Category(
         subreddits = listOf("wallpaper", "wallpapers"),
         unsplashQuery = "vibrant colorful",
         pixabayQuery = "vibrant colorful",
+        openverseQuery = "vibrant colorful",
+        nasaQuery = "aurora borealis lights",
+        flickrQuery = "vibrant colorful wallpaper",
+        wikimediaQuery = "colorful vibrant",
     ),
     ABSTRACT(
         displayName = "Abstract",
@@ -36,6 +48,10 @@ enum class Category(
         subreddits = listOf("wallpaper", "wallpapers"),
         unsplashQuery = "abstract",
         pixabayQuery = "abstract colorful",
+        openverseQuery = "abstract art background",
+        nasaQuery = "nebula abstract colorful",
+        flickrQuery = "abstract art",
+        wikimediaQuery = "abstract art",
     ),
     NEON(
         displayName = "Neon",
@@ -45,6 +61,10 @@ enum class Category(
         subreddits = listOf("Cyberpunk", "outrun"),
         unsplashQuery = "neon",
         pixabayQuery = "neon",
+        openverseQuery = "neon lights glow",
+        nasaQuery = "aurora lights glow",
+        flickrQuery = "neon lights",
+        wikimediaQuery = "neon",
     ),
     GRADIENT(
         displayName = "Gradient",
@@ -54,6 +74,10 @@ enum class Category(
         subreddits = listOf("wallpaper", "wallpapers"),
         unsplashQuery = "gradient",
         pixabayQuery = "gradient",
+        openverseQuery = "gradient color background",
+        nasaQuery = "nebula gradient color",
+        flickrQuery = "gradient color background",
+        wikimediaQuery = "gradient",
     ),
     SPACE(
         displayName = "Space",
@@ -62,6 +86,10 @@ enum class Category(
         subreddits = listOf("spaceporn", "astrophotography"),
         unsplashQuery = "space galaxy",
         pixabayQuery = "space galaxy nebula",
+        openverseQuery = "space galaxy nebula",
+        nasaQuery = "galaxy nebula space",
+        flickrQuery = "space galaxy nebula",
+        wikimediaQuery = "galaxy nebula space",
     ),
     AI_ART(
         displayName = "AI Art",
@@ -70,6 +98,10 @@ enum class Category(
         subreddits = listOf("AIArt", "midjourney", "StableDiffusion"),
         unsplashQuery = "digital art colorful",
         pixabayQuery = "digital art colorful",
+        openverseQuery = "digital art illustration",
+        nasaQuery = "nebula art colorful",
+        flickrQuery = "digital art illustration",
+        wikimediaQuery = "digital art",
     ),
     // ---- Topical / subject categories ----
     NATURE(
@@ -80,6 +112,10 @@ enum class Category(
         subreddits = listOf("EarthPorn", "NatureIsFuckingLit"),
         unsplashQuery = "nature",
         pixabayQuery = "nature landscape",
+        openverseQuery = "nature landscape",
+        nasaQuery = "earth nature from space",
+        flickrQuery = "nature landscape",
+        wikimediaQuery = "nature landscape",
     ),
     LANDSCAPES(
         displayName = "Landscapes",
@@ -88,6 +124,10 @@ enum class Category(
         subreddits = listOf("EarthPorn", "LandscapePhotography"),
         unsplashQuery = "landscape",
         pixabayQuery = "landscape scenery",
+        openverseQuery = "landscape scenery",
+        nasaQuery = "earth landscape aerial",
+        flickrQuery = "landscape scenic",
+        wikimediaQuery = "landscape",
     ),
     CITY(
         displayName = "City",
@@ -96,6 +136,10 @@ enum class Category(
         subreddits = listOf("CityPorn", "urbanporn"),
         unsplashQuery = "cityscape",
         pixabayQuery = "city skyline",
+        openverseQuery = "cityscape urban skyline",
+        nasaQuery = "earth city lights night",
+        flickrQuery = "city skyline",
+        wikimediaQuery = "cityscape",
     ),
     ARCHITECTURE(
         displayName = "Architecture",
@@ -104,6 +148,10 @@ enum class Category(
         subreddits = listOf("ArchitecturePorn", "wallpaper"),
         unsplashQuery = "architecture",
         pixabayQuery = "architecture",
+        openverseQuery = "architecture building",
+        nasaQuery = "space station architecture",
+        flickrQuery = "architecture building",
+        wikimediaQuery = "architecture",
     ),
     ANIMALS(
         displayName = "Animals",
@@ -112,6 +160,10 @@ enum class Category(
         subreddits = listOf("NatureIsFuckingLit", "wildlifephotography"),
         unsplashQuery = "animals wildlife",
         pixabayQuery = "animals wildlife",
+        openverseQuery = "animals wildlife",
+        nasaQuery = "earth wildlife animals",
+        flickrQuery = "animals wildlife",
+        wikimediaQuery = "wildlife animals",
     ),
     CARS(
         displayName = "Cars",
@@ -120,6 +172,10 @@ enum class Category(
         subreddits = listOf("carporn", "wallpaper"),
         unsplashQuery = "cars automotive",
         pixabayQuery = "cars automotive",
+        openverseQuery = "cars automobile",
+        nasaQuery = "rover vehicle spacecraft",
+        flickrQuery = "cars automotive",
+        wikimediaQuery = "automobile car",
     ),
     ANIME(
         displayName = "Anime",
@@ -129,6 +185,10 @@ enum class Category(
         subreddits = listOf("Animewallpaper", "Amoledbackgrounds"),
         unsplashQuery = "anime illustration",
         pixabayQuery = "anime",
+        openverseQuery = "anime illustration",
+        nasaQuery = "nebula colorful art",
+        flickrQuery = "anime illustration",
+        wikimediaQuery = "anime",
     ),
     ART(
         displayName = "Art",
@@ -137,6 +197,10 @@ enum class Category(
         subreddits = listOf("ImaginaryLandscapes", "SpecArt"),
         unsplashQuery = "art illustration",
         pixabayQuery = "art illustration",
+        openverseQuery = "art painting illustration",
+        nasaQuery = "nebula art",
+        flickrQuery = "art painting",
+        wikimediaQuery = "painting art masterpiece",
     ),
     TECHNOLOGY(
         displayName = "Technology",
@@ -145,6 +209,10 @@ enum class Category(
         subreddits = listOf("wallpaper", "wallpapers"),
         unsplashQuery = "technology",
         pixabayQuery = "technology",
+        openverseQuery = "technology digital",
+        nasaQuery = "spacecraft technology engineering",
+        flickrQuery = "technology futuristic",
+        wikimediaQuery = "technology",
     ),
     // ---- Muted / dark — kept but moved to end so they don't dominate the default view ----
     MINIMAL(
@@ -154,6 +222,10 @@ enum class Category(
         subreddits = listOf("MinimalWallpaper", "Minimalism"),
         unsplashQuery = "minimal",
         pixabayQuery = "minimal",
+        openverseQuery = "minimal simple clean",
+        nasaQuery = "earth minimal",
+        flickrQuery = "minimalist simple",
+        wikimediaQuery = "minimalist",
     ),
     AMOLED(
         displayName = "Dark/AMOLED",
@@ -162,5 +234,9 @@ enum class Category(
         subreddits = listOf("Amoledbackgrounds", "darkwallpaper"),
         unsplashQuery = "dark minimal",
         pixabayQuery = "dark amoled",
+        openverseQuery = "dark black",
+        nasaQuery = "space dark",
+        flickrQuery = "dark black abstract",
+        wikimediaQuery = "dark",
     ),
 }

@@ -97,6 +97,7 @@ fun HomeScreen(
                     ErrorState(
                         onRetry = wallpapers::refresh,
                         modifier = Modifier.padding(contentPadding),
+                        message = error.message,
                     )
                 }
             }

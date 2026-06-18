@@ -267,3 +267,50 @@ but the clear happens first in all cases. This also eliminates alpha bleed in cr
 `clampTranslateX` range updated to ±halfOverflow (was [−overflow, 0]).
 `fixedOffsetTranslateX` simplified to return 0 (bitmap is already centred by destRect; 0 is
 correct for the fixed-offset/parallax-disabled case).
+
+---
+
+## 2026-06-18 — new sources + Reddit OAuth + refresh fixes (v1.4)
+
+**Four new wallpaper sources**: Added Openverse, NASA Image Library, Flickr, and Wikimedia Commons
+as `WallpaperSource` implementations using the existing pluggable multibinding pattern.
+- **Openverse** and **NASA** and **Wikimedia Commons** are keyless (`isConfigured = true`);
+  all three have permissive licensing (Creative Commons / public domain / freely reusable).
+- **Flickr** requires a free non-commercial API key (`FLICKR_API_KEY` in `local.properties` /
+  BuildConfig); key passed as a query param (same pattern as Pixabay). CC+public-domain
+  licences enforced via `license=4,5,6,9,10`; `safe_search=1` enforces SFW.
+- Wikimedia Commons uses a descriptive `User-Agent` (policy requirement for bots).
+- Each new source got DTO files, a Retrofit API interface, a source class, Hilt bindings, and
+  a query field on every `Category` enum entry (17 categories × 4 sources). `SourceId` enum
+  extended with `OPENVERSE`, `NASA`, `FLICKR`, `WIKIMEDIA`.
+
+**Reddit → userless OAuth** (fix): Reddit's unauthenticated `.json` API returns HTTP 403 HTML
+from clients without a logged-in session. Root cause: `JsonDecodingException: Expected '{' but
+had '<'`. Fix: implemented `RedditAuthInterceptor` that fetches an application-only bearer token
+via `grant_type=https://oauth.reddit.com/grants/installed_client` with `Basic clientId:""` auth
+against `https://www.reddit.com/api/v1/access_token`. Token is cached in-memory (refreshed 60s
+before expiry); on 401 the cached token is invalidated and one automatic re-fetch is made. Reddit
+Retrofit base URL changed from `reddit.com` to `oauth.reddit.com`. A stable `device_id` (UUID)
+is generated once per install and persisted in DataStore. `RedditSource.isConfigured` now gates
+on `effectiveRedditClientId` being non-blank (was always `true`). User can supply a client ID
+via Settings → Sources → Reddit client ID field (or via `REDDIT_CLIENT_ID` in `local.properties`).
+
+**Visible source failures** (fix): `MultiSourcePagingSource.load()` previously returned an empty
+`Page` even when all sources threw exceptions (silent blank screen). Fixed by tracking `anyThrew`
+and `lastException`. If the deduplicated result list is empty AND at least one source threw, the
+pager returns `LoadResult.Error(lastException!!)` so `HomeScreen` renders `ErrorState` with a
+Retry button and the error message. Partial-success case unchanged: if some sources succeed and
+others fail, partial results are returned (fail-soft; per-source failures don't blank the grid).
+
+**Always-fresh refresh** (fix): Three sub-fixes:
+1. `MultiSourcePagingSource.load()` now bypasses the Room TTL cache entirely when
+   `params is LoadParams.Refresh` — network is always fetched on first load and pull-to-refresh;
+   only `LoadParams.Append` (infinite scroll) consults cached rows.
+2. `buildCacheKey` now appends a subreddit signature for Reddit (`":${subs.sorted().join("+")}")`)
+   so changing the subreddit list never produces a cache hit against the old selection.
+3. `HomeViewModel` `combine` now includes `settingsRepo.userSubreddits` as a third input (alongside
+   `selectedCategories` and `enabledSources`) so any subreddit change triggers a new `Pager`
+   instance and fresh load.
+
+**Version bump**: `versionCode = 5`, `versionName = "1.4"`. Fastlane changelog added at
+`fastlane/metadata/android/en-US/changelogs/5.txt`.

@@ -26,12 +26,25 @@ class UserKeyCache @Inject constructor(
         private set
     @Volatile var effectivePixabayKey: String = BuildConfig.PIXABAY_API_KEY
         private set
+    @Volatile var effectiveFlickrKey: String = BuildConfig.FLICKR_API_KEY
+        private set
+    @Volatile var effectiveRedditClientId: String = BuildConfig.REDDIT_CLIENT_ID
+        private set
+    /** Stable per-install device ID for Reddit userless OAuth. Populated async on first start. */
+    @Volatile var effectiveRedditDeviceId: String = "wallora_android_device"
+        private set
 
     init {
         collectKey(settingsRepository.userPexelsKey, BuildConfig.PEXELS_API_KEY) { effectivePexelsKey = it }
         collectKey(settingsRepository.userUnsplashKey, BuildConfig.UNSPLASH_ACCESS_KEY) { effectiveUnsplashKey = it }
         collectKey(settingsRepository.userWallhavenKey, BuildConfig.WALLHAVEN_API_KEY) { effectiveWallhavenKey = it }
         collectKey(settingsRepository.userPixabayKey, BuildConfig.PIXABAY_API_KEY) { effectivePixabayKey = it }
+        collectKey(settingsRepository.userFlickrKey, BuildConfig.FLICKR_API_KEY) { effectiveFlickrKey = it }
+        collectKey(settingsRepository.userRedditClientId, BuildConfig.REDDIT_CLIENT_ID) { effectiveRedditClientId = it }
+        // Persist & cache a stable per-install device ID for Reddit userless OAuth
+        appScope.launch {
+            effectiveRedditDeviceId = settingsRepository.getOrCreateRedditDeviceId()
+        }
     }
 
     /** Collects a user-key flow and assigns the effective key (user override, else BuildConfig fallback). */

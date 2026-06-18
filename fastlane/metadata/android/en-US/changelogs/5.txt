@@ -1,0 +1,4 @@
+• Four new wallpaper sources: Openverse (Creative Commons), NASA Image Library, Flickr (CC-licensed), and Wikimedia Commons — no API key required for three of them
+• Reddit fixed: now uses application-only OAuth so wallpapers load without needing a browser login; add your Reddit client ID in Settings → Sources
+• Broken sources now show a visible error with a Retry button instead of a silent empty screen
+• Refresh and source/category/subreddit changes always fetch fresh wallpapers — no more stale results after toggling filters

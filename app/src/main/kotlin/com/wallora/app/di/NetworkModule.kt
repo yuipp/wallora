@@ -3,6 +3,7 @@ package com.wallora.app.di
 import android.content.Context
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.wallora.app.BuildConfig
+import com.wallora.app.data.remote.interceptor.RedditAuthInterceptor
 import com.wallora.app.data.remote.interceptor.ThrottleInterceptor
 import dagger.Module
 import dagger.Provides
@@ -28,6 +29,10 @@ const val RETROFIT_WALLHAVEN = "wallhaven"
 const val RETROFIT_REDDIT = "reddit"
 const val RETROFIT_UNSPLASH = "unsplash"
 const val RETROFIT_PIXABAY = "pixabay"
+const val RETROFIT_OPENVERSE = "openverse"
+const val RETROFIT_NASA = "nasa"
+const val RETROFIT_FLICKR = "flickr"
+const val RETROFIT_WIKIMEDIA = "wikimedia"
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -117,20 +122,33 @@ object NetworkModule {
             .build()
     }
 
+    /**
+     * Bare OkHttpClient used by [RedditAuthInterceptor] to fetch OAuth tokens.
+     * Must NOT contain the Reddit auth interceptor (avoids circular dependency).
+     */
+    @Singleton
+    @Provides
+    @Named("reddit_token_client")
+    fun provideRedditTokenClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .addInterceptor(buildLoggingInterceptor())
+            .build()
+
     @Singleton
     @Provides
     @Named(RETROFIT_REDDIT)
-    fun provideRedditRetrofit(json: Json): Retrofit {
-        // Reddit requires a distinctive User-Agent to avoid 403 from automated request detection
+    fun provideRedditRetrofit(
+        json: Json,
+        redditAuthInterceptor: RedditAuthInterceptor,
+    ): Retrofit {
+        // Base URL is oauth.reddit.com — the auth interceptor adds Bearer token + User-Agent.
         val client = baseClientBuilder(throttleMs = 2_000L) // polite for Reddit
-            .addInterceptor { chain ->
-                val req = chain.request().newBuilder()
-                    .header("User-Agent", "android:com.wallora.app:v1.0 (by /u/wallora_app)")
-                    .build()
-                chain.proceed(req)
-            }.build()
+            .addInterceptor(redditAuthInterceptor)
+            .build()
         return Retrofit.Builder()
-            .baseUrl("https://www.reddit.com/")
+            .baseUrl("https://oauth.reddit.com/")
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
@@ -164,6 +182,70 @@ object NetworkModule {
         val client = baseClientBuilder(throttleMs = 800L).build()
         return Retrofit.Builder()
             .baseUrl("https://pixabay.com/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    @Named(RETROFIT_OPENVERSE)
+    fun provideOpenverseRetrofit(json: Json): Retrofit {
+        // Openverse is keyless — anonymous access with polite throttling.
+        val client = baseClientBuilder(throttleMs = 600L)
+            .addInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header("User-Agent", "Wallora/1.4 (Android; com.wallora.app)")
+                    .build()
+                chain.proceed(req)
+            }.build()
+        return Retrofit.Builder()
+            .baseUrl("https://api.openverse.org/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    @Named(RETROFIT_NASA)
+    fun provideNasaRetrofit(json: Json): Retrofit {
+        // NASA Image Library — no API key, generous rate limits.
+        val client = baseClientBuilder(throttleMs = 500L).build()
+        return Retrofit.Builder()
+            .baseUrl("https://images-api.nasa.gov/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    @Named(RETROFIT_FLICKR)
+    fun provideFlickrRetrofit(json: Json): Retrofit {
+        // Flickr key is a query param (passed by FlickrSource) — no auth interceptor needed.
+        val client = baseClientBuilder(throttleMs = 800L).build()
+        return Retrofit.Builder()
+            .baseUrl("https://api.flickr.com/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+    }
+
+    @Singleton
+    @Provides
+    @Named(RETROFIT_WIKIMEDIA)
+    fun provideWikimediaRetrofit(json: Json): Retrofit {
+        // Wikimedia requires a descriptive User-Agent per their usage policy.
+        val client = baseClientBuilder(throttleMs = 600L)
+            .addInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header("User-Agent", "Wallora/1.4 (https://github.com/wallora; ranjandeo@gmail.com)")
+                    .build()
+                chain.proceed(req)
+            }.build()
+        return Retrofit.Builder()
+            .baseUrl("https://commons.wikimedia.org/")
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
