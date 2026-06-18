@@ -9,12 +9,15 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.wallora.app.di.ApplicationScope
 import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.EditParams
 import com.wallora.app.domain.model.SourceId
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +28,29 @@ import javax.inject.Singleton
 @Singleton
 class SettingsRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) {
+
+    // ── Schema migration ──────────────────────────────────────────────────────
+    // Version 1: auto-enable sources added in v1.4 (OPENVERSE, NASA, FLICKR, WIKIMEDIA)
+    //            that upgrading users never explicitly disabled (they didn't exist before).
+    private val sourcesSchemaVersionKey = intPreferencesKey("sources_schema_version")
+    private val SOURCES_SCHEMA_CURRENT = 1
+
+    init {
+        appScope.launch {
+            dataStore.edit { prefs ->
+                if ((prefs[sourcesSchemaVersionKey] ?: 0) < SOURCES_SCHEMA_CURRENT) {
+                    val current = prefs[stringSetPreferencesKey("enabled_sources")]?.toMutableSet()
+                    if (current != null) {
+                        current.addAll(listOf("OPENVERSE", "NASA", "FLICKR", "WIKIMEDIA"))
+                        prefs[stringSetPreferencesKey("enabled_sources")] = current
+                    }
+                    prefs[sourcesSchemaVersionKey] = SOURCES_SCHEMA_CURRENT
+                }
+            }
+        }
+    }
 
     // ── Source toggles ──────────────────────────────────────────────────────
     private val enabledSourcesKey = stringSetPreferencesKey("enabled_sources")
