@@ -46,7 +46,7 @@ class WikimediaCommonsSource @Inject constructor(
             iiProp = WikimediaCommonsApi.II_PROP,
             iiUrlWidth = WikimediaCommonsApi.THUMB_WIDTH,
         )
-        val pages = resp.query?.pages?.values ?: emptyList()
+        val pages = resp.query?.pages.orEmpty()
         val items = pages
             .filter { it.pageid > 0 }           // negative pageid = not found
             .filter { it.imageinfo.isNotEmpty() }

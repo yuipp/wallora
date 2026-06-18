@@ -15,13 +15,14 @@ interface OpenverseApi {
         @Query("q") query: String,
         @Query("page") page: Int,
         @Query("page_size") pageSize: Int,
-        @Query("license_type") licenseType: String,
+        @Query("license") license: String,
         @Query("mature") mature: Boolean,
     ): OpenverseSearchResponse
 
     companion object {
         const val PAGE_SIZE = 20
-        /** Permissive CC licenses: CC0 (public domain), CC BY, CC BY-SA. */
-        const val LICENSE_TYPES = "cc0,by,by-sa"
+        /** Permissive CC licenses: CC0 (public domain), CC BY, CC BY-SA.
+         *  Passed via the 'license' query param (individual SPDX codes, not license_type groups). */
+        const val LICENSES = "cc0,by,by-sa"
     }
 }

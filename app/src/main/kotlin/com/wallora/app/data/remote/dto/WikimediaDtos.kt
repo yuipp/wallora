@@ -11,7 +11,8 @@ data class WikimediaSearchResponse(
 
 @Serializable
 data class WikimediaQuery(
-    val pages: Map<String, WikimediaPage> = emptyMap(),
+    // formatversion=2 returns pages as a JSON array (not an object map)
+    val pages: List<WikimediaPage> = emptyList(),
 )
 
 @Serializable

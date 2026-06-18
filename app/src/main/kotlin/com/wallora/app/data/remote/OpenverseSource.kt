@@ -35,7 +35,7 @@ class OpenverseSource @Inject constructor(
             query = query,
             page = pageNum,
             pageSize = OpenverseApi.PAGE_SIZE,
-            licenseType = OpenverseApi.LICENSE_TYPES,
+            license = OpenverseApi.LICENSES,
             mature = false,
         )
         val items = resp.results
