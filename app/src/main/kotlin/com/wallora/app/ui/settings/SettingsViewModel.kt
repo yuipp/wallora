@@ -313,13 +313,22 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.userRedditClientId
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
+    /** Enable a source automatically the first time the user connects a key for it. */
+    private suspend fun autoEnableOnConnect(source: SourceId, key: String) {
+        if (key.isNotBlank()) settingsRepository.setSourceEnabled(source, true)
+    }
+
     fun saveUserPexelsKey(key: String) = viewModelScope.launch {
-        settingsRepository.setUserPexelsKey(key.trim())
+        val trimmed = key.trim()
+        settingsRepository.setUserPexelsKey(trimmed)
+        autoEnableOnConnect(SourceId.PEXELS, trimmed)
         _events.emit(SettingsEvent.ShowMessage("Pexels key saved"))
     }
 
     fun saveUserUnsplashKey(key: String) = viewModelScope.launch {
-        settingsRepository.setUserUnsplashKey(key.trim())
+        val trimmed = key.trim()
+        settingsRepository.setUserUnsplashKey(trimmed)
+        autoEnableOnConnect(SourceId.UNSPLASH, trimmed)
         _events.emit(SettingsEvent.ShowMessage("Unsplash key saved"))
     }
 
@@ -329,17 +338,23 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun saveUserPixabayKey(key: String) = viewModelScope.launch {
-        settingsRepository.setUserPixabayKey(key.trim())
+        val trimmed = key.trim()
+        settingsRepository.setUserPixabayKey(trimmed)
+        autoEnableOnConnect(SourceId.PIXABAY, trimmed)
         _events.emit(SettingsEvent.ShowMessage("Pixabay key saved"))
     }
 
     fun saveUserFlickrKey(key: String) = viewModelScope.launch {
-        settingsRepository.setUserFlickrKey(key.trim())
+        val trimmed = key.trim()
+        settingsRepository.setUserFlickrKey(trimmed)
+        autoEnableOnConnect(SourceId.FLICKR, trimmed)
         _events.emit(SettingsEvent.ShowMessage("Flickr key saved"))
     }
 
     fun saveUserRedditClientId(clientId: String) = viewModelScope.launch {
-        settingsRepository.setUserRedditClientId(clientId.trim())
+        val trimmed = clientId.trim()
+        settingsRepository.setUserRedditClientId(trimmed)
+        autoEnableOnConnect(SourceId.REDDIT, trimmed)
         _events.emit(SettingsEvent.ShowMessage("Reddit client ID saved"))
     }
 

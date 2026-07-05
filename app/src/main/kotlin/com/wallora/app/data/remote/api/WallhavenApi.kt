@@ -16,6 +16,8 @@ interface WallhavenApi {
         @Query("sorting") sorting: String = "toplist",   // toplist → highest-rated content
         @Query("topRange") topRange: String = "1y",       // past year — wider variety than 6M
         @Query("order") order: String = "desc",
+        // Seed for sorting=random so a session shuffles consistently; null (omitted) otherwise.
+        @Query("seed") seed: String? = null,
         @Query("page") page: Int = 1,
     ): WallhavenResponse
 

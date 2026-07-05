@@ -18,11 +18,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import com.wallora.app.R
 
 @Composable
@@ -31,7 +36,9 @@ fun ApiKeyField(
     hint: String,
     currentKey: String,
     onSave: (String) -> Unit,
+    getKeyUrl: String? = null,
 ) {
+    val context = LocalContext.current
     var editing by remember { mutableStateOf(false) }
     var draft by remember(currentKey) { mutableStateOf(currentKey) }
     var showKey by remember { mutableStateOf(false) }
@@ -58,6 +65,11 @@ fun ApiKeyField(
                             .padding(top = 4.dp),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (getKeyUrl != null) {
+                            TextButton(onClick = { openUrl(context, getKeyUrl) }) {
+                                Text(stringResource(R.string.settings_api_get_key))
+                            }
+                        }
                         TextButton(onClick = { showKey = !showKey }) {
                             Text(
                                 if (showKey) stringResource(R.string.settings_api_key_hide)
@@ -90,4 +102,17 @@ fun ApiKeyField(
             }
         },
     )
+}
+
+/** Open [url] in a browser; silently no-ops if no browser handles the intent. */
+private fun openUrl(context: Context, url: String) {
+    val normalized = if (url.startsWith("http")) url else "https://$url"
+    try {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (_: ActivityNotFoundException) {
+        // No browser available — nothing to do.
+    }
 }

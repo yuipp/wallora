@@ -4,6 +4,20 @@ Decisions made during autonomous execution (date, decision, why).
 
 ---
 
+## 2026-07-05
+
+**Reddit API key acquisition changed (Responsible Builder Policy)**: As of 2025-11-11 Reddit
+ended self-service API keys. Filling the app form at reddit.com/prefs/apps no longer instantly
+creates an app — access must be requested via Reddit's Developer Support form
+(support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164) and approved (~7 days).
+Documented this in README ("API key setup") and the in-app Reddit client-ID hint string, and
+corrected the README's stale "Reddit — no key required" claim (Reddit has always needed a client
+ID; now it also needs approval). No code change: the existing bring-your-own client-ID model
+(Settings → Sources → Reddit client ID) is already the correct design — Reddit forbids shipping a
+shared/hardcoded key, and Wallora uses userless installed-app OAuth (client ID only, no secret).
+
+---
+
 ## 2026-06-13
 
 **JDK**: Eclipse Temurin 17.0.13 LTS (OpenJDK 17) installed to ~/.local/jdk17.
@@ -314,3 +328,65 @@ others fail, partial results are returned (fail-soft; per-source failures don't 
 
 **Version bump**: `versionCode = 5`, `versionName = "1.4"`. Fastlane changelog added at
 `fastlane/metadata/android/en-US/changelogs/5.txt`.
+
+---
+
+## 2026-07-05 — Vibrant feed engine + Settings redesign
+
+**Problem**: the grid looked boring on every launch — adjacent tiles were the same subject
+(each source was pinned to one category via `categories[index % size]`, then round-robin merged,
+so positions `i` and `i+N` were same-source/same-category and landed adjacent in the masonry),
+images skewed pale (Wallhaven `sorting=toplist` returned the same muted top set every time), and
+the captured `colorHint` was never used. Custom keywords were also a dead feature (persisted and
+shown but never passed to `browse()`).
+
+**Feed diversifier** (`data/paging/FeedDiversifier.kt`, new): pure, unit-tested Kotlin (no
+`android.graphics`) that reorders each page so neighbours differ in dominant colour (HSV hue from
+`colorHint`), category and source. Greedy: pick the remaining item least similar to the last K=3
+placed; tie-break by vibrancy (`sat*val`, a soft "prefer punchy" bias), then by stable index for
+determinism. Runs in `MultiSourcePagingSource.load()` **after** `seenKeys` dedup (so the
+LazyStaggeredGrid unique-key invariant is preserved) and carries a K-item `tail` across pages for
+continuity. K=3 approximates 2–3 columns since the paging layer has no column count. `colorHint`
+is present for Wallhaven/Pexels/Unsplash (the quality sources); other items spread by
+category/source only. Chose NOT to add AndroidX Palette — bitmaps only exist post-Coil in the UI,
+the wrong lifecycle for paging-time ordering.
+
+**Topic rotation + custom keywords**: `MultiSourcePagingSource` now rotates each source's subject
+by `(index + page + sessionOffset).mod(topics.size)` where topics = selected categories + custom
+keywords (keywords queried via `source.search`). So a source cycles subjects as you scroll, and
+the first screen differs across launches. `buildCacheKey` includes the keyword so keyword pages
+don't collide with category pages. `HomeViewModel.combine` gained `customKeywords`, wiring the
+previously-dead feature through `WallpaperRepository.browse`.
+
+**Freshness** (`di/SessionSeed.kt`, new): a `@Singleton` holding a per-process seed from
+`System.nanoTime()` (deliberately not persisted — a relaunch should reshuffle). Provides the
+rotation `topicOffset` and a 6-char base36 `wallhavenSeed`. Wallhaven page 1 stays `sorting=toplist`
+(high-quality first impression); deeper pages use `sorting=random&seed=<sessionSeed>` (fresh and
+more saturated than toplist) — the primary fix for "same every launch" and "pale". `WallhavenApi`
+gained a nullable `seed` query param.
+
+**Keyless-first defaults**: `SettingsRepository` default enabled sources = the keyless four
+(Wallhaven/Openverse/NASA/Wikimedia) ∪ any key-based source whose `BuildConfig` key is baked in
+(so the CI release still lights up everything, self-builds work with zero keys). `SettingsViewModel`
+auto-enables a source the first time its key is saved. Wallhaven is ordered first in
+`WallpaperRepository` (the anchor). `DEFAULT_CATEGORIES` changed to
+`{NATURE, SPACE, CITY, VIBRANT, ANIMALS, ABSTRACT}` for max subject+colour spread. These are
+read-time fallbacks → fresh installs only; existing users keep their choices (no migration).
+
+**Settings redesign**:
+- Sources page split into "Ready to use" (keyless rows, on by default) and "Connect for more"
+  (keyed `Card`s with connected/not-connected status, toggle, inline `ApiKeyField` + a
+  "Get free key" link that opens the signup URL via `ACTION_VIEW`).
+- Reddit subreddit selection moved from the Categories page onto the Reddit source card (shown
+  only when Reddit is connected + enabled) — clean mental model: Sources = where images come from
+  + per-source config; Categories = subjects.
+- Categories page replaced the 17-chip wall with visual gradient `CategoryCard`s (per-category
+  linear gradient from `ui/settings/components/CategoryVisuals.kt`) in a 2-column layout grouped
+  into "Vibrant & Abstract / Nature & Places / Culture & Art / Minimal & Dark". Custom keywords
+  became the "Your topics" section. Used chunked `Row`s (not `LazyVerticalGrid`) to avoid nested
+  vertical scroll inside the page's scrolling Column.
+- Hardcoded English literals in the Categories page moved to `strings.xml`.
+
+**Tests**: `FeedDiversifierTest` (10 tests) exercises the real object — HSV conversion, circular
+hue distance, size/set preservation, no-adjacent-same-category, hue-based separation, determinism,
+`tail` continuity, trivial inputs, and the rotation formula's full coverage.

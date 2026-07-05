@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.wallora.app.BuildConfig
 import com.wallora.app.di.ApplicationScope
 import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.EditParams
@@ -56,14 +57,14 @@ class SettingsRepository @Inject constructor(
     private val enabledSourcesKey = stringSetPreferencesKey("enabled_sources")
 
     val enabledSources: Flow<Set<SourceId>> = dataStore.data.map { prefs ->
-        val raw = prefs[enabledSourcesKey] ?: SourceId.entries.map { it.name }.toSet()
+        val raw = prefs[enabledSourcesKey] ?: defaultEnabledSourceNames()
         raw.mapNotNull { runCatching { SourceId.valueOf(it) }.getOrNull() }.toSet()
     }
 
     suspend fun setSourceEnabled(source: SourceId, enabled: Boolean) {
         dataStore.edit { prefs ->
             val current = prefs[enabledSourcesKey]?.toMutableSet()
-                ?: SourceId.entries.map { it.name }.toMutableSet()
+                ?: defaultEnabledSourceNames().toMutableSet()
             if (enabled) current.add(source.name) else current.remove(source.name)
             prefs[enabledSourcesKey] = current
         }
@@ -302,10 +303,39 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Sources enabled on a fresh install: the keyless four (work with no key) plus any key-based
+     * source whose key is already baked into the build (the CI release ships all keys). This makes
+     * the app "keyless-first" — a great grid with zero setup — while a full release still lights up
+     * everything, and user-added keys auto-enable their source (see SettingsViewModel).
+     */
+    private fun defaultEnabledSourceNames(): Set<String> {
+        val keyless = setOf("WALLHAVEN", "OPENVERSE", "NASA", "WIKIMEDIA")
+        val keyed = buildSet {
+            if (BuildConfig.PEXELS_API_KEY.isNotBlank()) add("PEXELS")
+            if (BuildConfig.UNSPLASH_ACCESS_KEY.isNotBlank()) add("UNSPLASH")
+            if (BuildConfig.PIXABAY_API_KEY.isNotBlank()) add("PIXABAY")
+            if (BuildConfig.FLICKR_API_KEY.isNotBlank()) add("FLICKR")
+            if (BuildConfig.REDDIT_CLIENT_ID.isNotBlank()) add("REDDIT")
+        }
+        return keyless + keyed
+    }
+
     companion object {
         val DEFAULT_SUBREDDITS = listOf("iWallpaper")
 
-        /** Default categories — one distinct subject per source so the grid looks Pinterest-varied on first open. */
-        val DEFAULT_CATEGORIES = setOf(Category.NATURE, Category.SPACE, Category.CITY, Category.ABSTRACT, Category.ANIMALS)
+        /**
+         * Default categories — a spread of distinct subjects and colours (green/blue nature, colourful
+         * space, varied cityscapes, saturated vibrant, varied animals, colourful abstract) so the very
+         * first grid looks rich and varied. The feed engine rotates and colour-diversifies from here.
+         */
+        val DEFAULT_CATEGORIES = setOf(
+            Category.NATURE,
+            Category.SPACE,
+            Category.CITY,
+            Category.VIBRANT,
+            Category.ANIMALS,
+            Category.ABSTRACT,
+        )
     }
 }

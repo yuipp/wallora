@@ -1,0 +1,5 @@
+• Fresher, more colourful feed: adjacent wallpapers now vary in colour and subject instead of clustering the same look, and each launch surfaces a new mix
+• Works great out of the box — no API key needed; keyless sources (Wallhaven, NASA, Openverse, Wikimedia) are on by default, and adding a key auto-enables its source
+• Custom topics now work: add any subject (a character, movie, colour…) and it blends into your feed
+• Redesigned Settings: "Ready to use" vs "Connect for more" sources with one-tap "Get free key" links, and Reddit subreddits live on the Reddit source
+• Categories are now visual gradient cards grouped by theme

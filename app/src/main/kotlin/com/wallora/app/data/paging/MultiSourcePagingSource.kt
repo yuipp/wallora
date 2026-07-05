@@ -40,7 +40,24 @@ class MultiSourcePagingSource(
      * so it matches what RedditSource will actually use.
      */
     private val userSubreddits: List<String> = emptyList(),
+    /**
+     * User-defined free-text topics (e.g. "Iron Man"). Rotated alongside [categories] so each
+     * source cycles through subjects across pages. Queried via [WallpaperSource.search].
+     */
+    private val customKeywords: List<String> = emptyList(),
+    /**
+     * Per-session offset added to the topic rotation so the first screen differs across launches
+     * while staying stable within a browsing session. Comes from [com.wallora.app.di.SessionSeed].
+     */
+    private val topicOffset: Int = 0,
 ) : PagingSource<MultiSourcePagingSource.PageKey, Wallpaper>() {
+
+    /** A subject to query: either a built-in [category] or a free-text [keyword]. */
+    private data class Topic(val category: Category?, val keyword: String?)
+
+    /** Combined rotation pool: built-in categories first, then custom keywords. */
+    private val topics: List<Topic> =
+        categories.map { Topic(it, null) } + customKeywords.map { Topic(null, it) }
 
     /**
      * Tracks globalKeys already emitted by this PagingSource instance.
@@ -50,6 +67,13 @@ class MultiSourcePagingSource(
      */
     private val seenKeys: MutableSet<String> =
         java.util.Collections.synchronizedSet(HashSet())
+
+    /**
+     * Last few items emitted on the previous page, so [FeedDiversifier] can keep the first item
+     * of the next page different from the end of the last. Instance-scoped like [seenKeys].
+     */
+    private val recentTail: MutableList<Wallpaper> =
+        java.util.Collections.synchronizedList(ArrayList())
 
     /** Holds a map of sourceId → next-page cursor for that source. */
     data class PageKey(val cursors: Map<String, String>)
@@ -74,21 +98,24 @@ class MultiSourcePagingSource(
         for ((index, source) in sources.withIndex()) {
             val sourceKey = source.id.name
             val cursor = key.cursors[sourceKey] ?: "1"
+            val pageNum = cursor.toIntOrNull() ?: 1
 
-            // Each source gets one category by round-robin so the grid shows different
-            // subjects side-by-side (nature next to space next to city …) rather than
-            // all sources querying the same mixed bag.
-            val effectiveCategories = when {
-                query != null || categories.isEmpty() -> categories
-                else -> listOf(categories[index % categories.size])
+            // Each source gets ONE topic per page, rotated by (source, page, session seed) so the
+            // grid shows different subjects side-by-side AND each source cycles subjects as you
+            // scroll — instead of a source being pinned to the same subject forever.
+            val topic: Topic? = when {
+                query != null || topics.isEmpty() -> null
+                else -> topics[(index + pageNum + topicOffset).mod(topics.size)]
             }
+            val effectiveCategories = topic?.category?.let { listOf(it) } ?: emptyList()
+            val effectiveKeyword = query ?: topic?.keyword
 
             val items: List<Wallpaper>
             val nextCursor: String?
 
             // On Refresh, always bypass the cache so the user always sees fresh data
             // (e.g., after changing categories / sources / subreddits).
-            val cacheKey = buildCacheKey(source.id, cursor, effectiveCategories)
+            val cacheKey = buildCacheKey(source.id, cursor, effectiveCategories, effectiveKeyword)
             val cached = if (isRefresh) emptyList()
             else {
                 val minTimestamp = System.currentTimeMillis() - cacheTtlMs
@@ -102,7 +129,7 @@ class MultiSourcePagingSource(
                 Log.d(TAG, "${source.id}: cache hit (${items.size} items)")
             } else {
                 try {
-                    val page = if (query != null) source.search(query, cursor)
+                    val page = if (effectiveKeyword != null) source.search(effectiveKeyword, cursor)
                                else source.browse(effectiveCategories, cursor)
                     items = page.items
                     nextCursor = page.nextPage
@@ -125,7 +152,7 @@ class MultiSourcePagingSource(
             if (nextCursor != null) nextCursors[sourceKey] = nextCursor
         }
 
-        // Round-robin interleave results from all sources
+        // Round-robin interleave results from all sources for a fair base order.
         val interleaved = roundRobinInterleave(resultLists)
 
         // Cross-page dedup: filter by seenKeys so the same wallpaper never appears
@@ -139,13 +166,27 @@ class MultiSourcePagingSource(
             return LoadResult.Error(lastException!!)
         }
 
+        // Reorder so adjacent tiles differ in colour, category and source. Runs AFTER dedup so
+        // the LazyStaggeredGrid unique-key invariant is preserved. `tail` carries continuity from
+        // the previous page.
+        val diversified = FeedDiversifier.diverse(deduped, tail = tailSnapshot())
+        rememberTail(diversified)
+
         val nextKey = if (nextCursors.isEmpty()) null else PageKey(nextCursors)
 
         return LoadResult.Page(
-            data = deduped,
+            data = diversified,
             prevKey = null,
             nextKey = nextKey,
         )
+    }
+
+    private fun tailSnapshot(): List<Wallpaper> =
+        synchronized(recentTail) { recentTail.toList() }
+
+    private fun rememberTail(page: List<Wallpaper>) = synchronized(recentTail) {
+        recentTail.addAll(page)
+        while (recentTail.size > FeedDiversifier.DEFAULT_WINDOW) recentTail.removeAt(0)
     }
 
     /**
@@ -156,9 +197,12 @@ class MultiSourcePagingSource(
         sourceId: SourceId,
         page: String,
         effectiveCategories: List<Category>,
+        effectiveKeyword: String?,
     ): String {
-        val catPart = if (query != null) "search:$query"
-                      else effectiveCategories.joinToString(",") { it.name }
+        val catPart = when {
+            effectiveKeyword != null -> "search:$effectiveKeyword"
+            else -> effectiveCategories.joinToString(",") { it.name }
+        }
         val subredditPart = if (sourceId == SourceId.REDDIT && userSubreddits.isNotEmpty()) {
             ":" + userSubreddits.sorted().joinToString("+")
         } else ""
