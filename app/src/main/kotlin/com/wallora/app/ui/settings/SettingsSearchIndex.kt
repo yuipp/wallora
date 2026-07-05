@@ -85,10 +85,10 @@ val SETTINGS_SEARCH_INDEX: List<SettingsSearchEntry> = listOf(
             "reddit", "subreddit", "r/", "earthporn", "wallpapers", "spaceporn",
             "amoledbackgrounds", "cityporn", "midjourney", "aiart",
         ),
-        target = SettingsTarget.Page(WalloraSettingsRoute.CATEGORIES),
+        target = SettingsTarget.Page(WalloraSettingsRoute.SOURCES),
     ),
     SettingsSearchEntry(
-        titleRes = R.string.settings_custom_keyword_add,
+        titleRes = R.string.settings_topics_add,
         icon = Icons.Outlined.Label,
         keywords = listOf("keyword", "custom", "topic", "search term", "tag"),
         target = SettingsTarget.Page(WalloraSettingsRoute.CATEGORIES),

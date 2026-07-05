@@ -128,9 +128,9 @@
 
     <!-- Settings — master list row titles + subtitles -->
     <string name="settings_sources_title">Sources &amp; API keys</string>
-    <string name="settings_sources_subtitle">Enabled providers and personal API keys</string>
-    <string name="settings_categories_title">Categories &amp; keywords</string>
-    <string name="settings_categories_subtitle">Browse focus, custom topics, Reddit subreddits</string>
+    <string name="settings_sources_subtitle">Providers, personal API keys and subreddits</string>
+    <string name="settings_categories_title">Categories &amp; topics</string>
+    <string name="settings_categories_subtitle">Browse focus and your own custom topics</string>
     <string name="settings_rotation_title">Auto-change wallpaper</string>
     <string name="settings_rotation_subtitle">Changes wallpaper automatically — works without live mode</string>
     <string name="settings_live_title">Live wallpaper &amp; parallax</string>
@@ -161,7 +161,7 @@
     <string name="settings_api_flickr_label">Flickr API key</string>
     <string name="settings_api_flickr_hint">Free non-commercial key at flickr.com/services/apps/create</string>
     <string name="settings_api_reddit_label">Reddit client ID</string>
-    <string name="settings_api_reddit_hint">Register a free installed app at reddit.com/prefs/apps</string>
+    <string name="settings_api_reddit_hint">Reddit now requires approval before issuing API keys. Request access via Reddit\'s Developer Support form, create an \"installed app\" at reddit.com/prefs/apps once approved, then paste the client ID here (no secret needed).</string>
     <string name="settings_api_key_configured">Key configured</string>
     <string name="settings_api_key_save">Save</string>
     <string name="settings_api_key_clear">Clear</string>
@@ -169,17 +169,54 @@
     <string name="settings_api_key_hide">Hide</string>
     <string name="settings_api_key_edit">Edit</string>
 
-    <!-- Settings — Categories page -->
-    <string name="settings_categories_focus_hint">Select categories to focus on — leave all off to show everything</string>
-    <string name="settings_custom_keyword_add">Add keyword</string>
-    <string name="settings_custom_keyword_dialog_title">Add custom category</string>
-    <string name="settings_custom_keyword_dialog_body">Type any keyword to add it as a browsable category.</string>
-    <string name="settings_custom_keyword_placeholder">e.g. ocean sunset</string>
-    <string name="settings_reddit_section">Reddit sources</string>
-    <string name="settings_reddit_hint">Subreddits Wallora browses for wallpapers</string>
+    <!-- Settings — Sources page (redesigned) -->
+    <string name="settings_sources_reassure">Wallora works out of the box — no account or key needed.</string>
+    <string name="settings_sources_ready_section">Ready to use</string>
+    <string name="settings_sources_ready_hint">No key required — on by default.</string>
+    <string name="settings_source_ready">Ready</string>
+    <string name="settings_sources_connect_section">Connect for more</string>
+    <string name="settings_sources_connect_hint">Add a free key to unlock these sources. Stored on-device only.</string>
+    <string name="settings_source_connected">Connected</string>
+    <string name="settings_source_not_connected">Not connected</string>
+    <string name="settings_api_get_key">Get free key</string>
+    <string name="settings_source_desc_wallhaven">Curated high-resolution wallpapers</string>
+    <string name="settings_source_desc_nasa">Space &amp; astronomy imagery</string>
+    <string name="settings_source_desc_openverse">Creative-Commons photos &amp; art</string>
+    <string name="settings_source_desc_wikimedia">Public-domain &amp; CC media</string>
+    <string name="settings_source_desc_pexels">Free stock photography</string>
+    <string name="settings_source_desc_unsplash">High-quality photography</string>
+    <string name="settings_source_desc_pixabay">Free photos &amp; illustrations</string>
+    <string name="settings_source_desc_flickr">Community &amp; CC photography</string>
+    <string name="settings_source_desc_reddit">Wallpaper subreddits</string>
+
+    <!-- Settings — Categories page (redesigned) -->
+    <string name="settings_categories_header">Categories</string>
+    <string name="settings_categories_focus_hint">Tap categories to focus your feed — leave all off to show everything</string>
+    <string name="settings_categories_group_vibrant">Vibrant &amp; Abstract</string>
+    <string name="settings_categories_group_nature">Nature &amp; Places</string>
+    <string name="settings_categories_group_culture">Culture &amp; Art</string>
+    <string name="settings_categories_group_minimal">Minimal &amp; Dark</string>
+    <string name="settings_topics_header">Your topics</string>
+    <string name="settings_topics_desc">Add any subject — a character, movie, colour, anything — and Wallora blends it into your feed.</string>
+    <string name="settings_topics_empty">No topics yet — tap Add to create one.</string>
+    <string name="settings_topics_add">Add topic</string>
+    <string name="settings_topics_dialog_title">Add a topic</string>
+    <string name="settings_topics_dialog_body">Type any subject to blend it into your feed.</string>
+    <string name="settings_topics_field_label">Topic</string>
+    <string name="settings_custom_keyword_placeholder">e.g. Iron Man, ocean sunset</string>
+
+    <!-- Settings — Reddit subreddits (now on Sources page, under the Reddit card) -->
+    <string name="settings_reddit_section">Subreddits</string>
+    <string name="settings_reddit_hint">Choose which subreddits Wallora browses for wallpapers</string>
     <string name="settings_reddit_add">Add subreddit</string>
+    <string name="settings_reddit_field_label">Subreddit name</string>
     <string name="settings_reddit_placeholder">e.g. wallpapers</string>
     <string name="settings_reddit_reset">Reset to defaults</string>
+    <string name="settings_reddit_custom_label">Custom</string>
+
+    <!-- Settings — common dialog actions -->
+    <string name="settings_dialog_add">Add</string>
+    <string name="settings_dialog_cancel">Cancel</string>
     <string name="settings_remove_content_desc">Remove %1$s</string>
 
     <!-- Settings — Rotation page -->
