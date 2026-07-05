@@ -1,6 +1,7 @@
 package com.wallora.app.data.remote
 
 import com.wallora.app.data.remote.api.WallhavenApi
+import com.wallora.app.di.SessionSeed
 import com.wallora.app.di.UserKeyCache
 import com.wallora.app.data.remote.dto.WallhavenWallpaper
 import com.wallora.app.domain.WallpaperSource
@@ -15,6 +16,7 @@ import javax.inject.Singleton
 class WallhavenSource @Inject constructor(
     private val api: WallhavenApi,
     private val userKeyCache: UserKeyCache,
+    private val sessionSeed: SessionSeed,
 ) : WallpaperSource {
 
     override val id: SourceId = SourceId.WALLHAVEN
@@ -24,9 +26,14 @@ class WallhavenSource @Inject constructor(
     override suspend fun browse(categories: List<Category>, page: String): Page<Wallpaper> {
         val pageNum = page.toIntOrNull() ?: 1
         val (query, catFlags) = buildQueryAndFlags(categories)
+        // Page 1 → toplist (a high-quality first impression). Deeper pages → random with a
+        // per-session seed so the feed feels fresh each launch instead of the same top set.
+        val useRandom = pageNum > 1
         val resp = api.search(
             query = query,
             categories = catFlags,
+            sorting = if (useRandom) "random" else "toplist",
+            seed = if (useRandom) sessionSeed.wallhavenSeed else null,
             page = pageNum,
         )
         val meta = resp.meta

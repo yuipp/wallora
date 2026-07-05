@@ -10,6 +10,7 @@ import com.wallora.app.data.local.dao.WallpaperDao
 import com.wallora.app.data.local.entity.FavoriteEntity
 import com.wallora.app.data.local.entity.HistoryEntity
 import com.wallora.app.data.paging.MultiSourcePagingSource
+import com.wallora.app.di.SessionSeed
 import com.wallora.app.domain.WallpaperSource
 import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.SourceId
@@ -26,6 +27,7 @@ class WallpaperRepository @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val historyDao: HistoryDao,
     private val settingsRepository: SettingsRepository,
+    private val sessionSeed: SessionSeed,
 ) {
 
     companion object {
@@ -34,13 +36,23 @@ class WallpaperRepository @Inject constructor(
         private const val CACHE_TTL_MS = 3_600_000L // 1 hour
     }
 
-    /** Browse wallpapers by categories — returns a Paging 3 flow. */
+    /**
+     * Order active sources so Wallhaven (the keyless, high-quality anchor) leads, then the rest
+     * by their declared order. Deterministic ordering also keeps the feed stable per session.
+     */
+    private fun orderedActiveSources(enabledSources: Set<SourceId>): List<WallpaperSource> =
+        sources
+            .filter { it.isConfigured && it.id in enabledSources }
+            .sortedBy { if (it.id == SourceId.WALLHAVEN) -1 else it.id.ordinal }
+
+    /** Browse wallpapers by categories + custom keywords — returns a Paging 3 flow. */
     fun browse(
         categories: List<Category>,
         enabledSources: Set<SourceId>,
         userSubreddits: List<String> = emptyList(),
+        customKeywords: List<String> = emptyList(),
     ): Flow<PagingData<Wallpaper>> {
-        val activeSources = sources.filter { it.isConfigured && it.id in enabledSources }
+        val activeSources = orderedActiveSources(enabledSources)
         return Pager(
             config = PagingConfig(
                 pageSize = PAGE_SIZE,
@@ -55,6 +67,8 @@ class WallpaperRepository @Inject constructor(
                     wallpaperDao = wallpaperDao,
                     cacheTtlMs = CACHE_TTL_MS,
                     userSubreddits = userSubreddits,
+                    customKeywords = customKeywords,
+                    topicOffset = sessionSeed.topicOffset,
                 )
             },
         ).flow
@@ -65,7 +79,7 @@ class WallpaperRepository @Inject constructor(
         query: String,
         enabledSources: Set<SourceId>,
     ): Flow<PagingData<Wallpaper>> {
-        val activeSources = sources.filter { it.isConfigured && it.id in enabledSources }
+        val activeSources = orderedActiveSources(enabledSources)
         return Pager(
             config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
             pagingSourceFactory = {

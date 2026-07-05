@@ -41,17 +41,29 @@ class HomeViewModel @Inject constructor(
     val enabledSources: StateFlow<Set<SourceId>> = settingsRepo.enabledSources
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SourceId.entries.toSet())
 
+    // User's own free-text topics (e.g. "Iron Man") — browsed alongside selected categories.
+    val customKeywords: StateFlow<Set<String>> = settingsRepo.customKeywords
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    private data class BrowseParams(
+        val categories: Set<Category>,
+        val sources: Set<SourceId>,
+        val subreddits: List<String>,
+        val keywords: Set<String>,
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val wallpapers: Flow<PagingData<Wallpaper>> =
         combine(
             selectedCategories,
             enabledSources,
             settingsRepo.userSubreddits,
-        ) { cats, sources, subs ->
-            Triple(cats, sources, subs)
+            customKeywords,
+        ) { cats, sources, subs, keywords ->
+            BrowseParams(cats, sources, subs, keywords)
         }
-            .flatMapLatest { (cats, sources, subs) ->
-                repository.browse(cats.toList(), sources, subs)
+            .flatMapLatest { p ->
+                repository.browse(p.categories.toList(), p.sources, p.subreddits, p.keywords.toList())
             }
             .cachedIn(viewModelScope)
 
