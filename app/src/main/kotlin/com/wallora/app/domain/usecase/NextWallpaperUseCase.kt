@@ -59,6 +59,7 @@ class NextWallpaperUseCase @Inject constructor(
     companion object {
         private const val TAG = "NextWallpaper"
         private const val MAX_NO_REPEAT_WINDOW = 30
+        private const val PAGES_PER_SOURCE = 4
     }
 
     /**
@@ -189,9 +190,13 @@ class NextWallpaperUseCase @Inject constructor(
         }
 
     /**
-     * Fetches one page of wallpapers per configured + enabled source for the currently
-     * selected categories. Calls [WallpaperSource.browse] with page "1" directly to avoid
-     * Paging 3 infrastructure overhead in a background context.
+     * Fetches several pages of wallpapers per configured + enabled source for the currently
+     * selected categories. Calls [WallpaperSource.browse] directly (bypassing Paging 3) to
+     * avoid its infrastructure overhead in a background context.
+     *
+     * Pulls up to [PAGES_PER_SOURCE] pages (following each source's [Page.nextPage] cursor)
+     * instead of just page "1" so the candidate pool — and therefore the no-repeat window in
+     * [RotationEngine] — isn't capped at a single small, unchanging page of results.
      */
     private suspend fun getCategoryBrowseCandidates(): List<Wallpaper> {
         val enabledSources = settingsRepository.enabledSources.first()
@@ -199,13 +204,18 @@ class NextWallpaperUseCase @Inject constructor(
             .toList()
             .ifEmpty { Category.entries.toList() }
 
-        // Collect one page per configured + enabled source
         val results = mutableListOf<Wallpaper>()
         for (source in sources) {
             if (!source.isConfigured || source.id !in enabledSources) continue
             try {
-                val page = source.browse(categories = categories, page = "1")
-                results += page.items
+                var cursor: String? = "1"
+                var pagesFetched = 0
+                while (cursor != null && pagesFetched < PAGES_PER_SOURCE) {
+                    val page = source.browse(categories = categories, page = cursor)
+                    results += page.items
+                    cursor = page.nextPage
+                    pagesFetched++
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Source ${source.id} failed during rotation fetch: ${e.message}")
             }
