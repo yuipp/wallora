@@ -8,6 +8,7 @@ import com.wallora.app.data.repository.WallpaperRepository
 import com.wallora.app.di.ApplicationScope
 import com.wallora.app.domain.WallpaperSource
 import com.wallora.app.domain.model.Category
+import com.wallora.app.domain.model.Page
 import com.wallora.app.domain.model.SourceId
 import com.wallora.app.domain.model.Wallpaper
 import com.wallora.app.domain.rotation.PickResult
@@ -206,13 +207,53 @@ class NextWallpaperUseCase @Inject constructor(
         }
 
     /**
+     * Fetches up to [PAGES_PER_SOURCE] pages worth of results into [results] for one topic,
+     * following [Page.nextPage] cursors. For [randomizeStart] sources (deterministic
+     * popularity/relevance ranking), the starting page is randomized so repeated calls don't
+     * just re-fetch the same top slice — see [RANDOM_START_SOURCES]. Falls back to page "1"
+     * if a random start landed past the end of a narrow result set.
+     */
+    private suspend fun fetchTopicPages(
+        results: MutableList<Wallpaper>,
+        randomizeStart: Boolean,
+        pagesToFetch: Int,
+        fetch: suspend (page: String) -> Page<Wallpaper>,
+    ) {
+        var cursor: String? = if (randomizeStart) {
+            Random.nextInt(1, RANDOM_START_PAGE_MAX + 1).toString()
+        } else {
+            "1"
+        }
+        var pagesFetched = 0
+        val before = results.size
+        while (cursor != null && pagesFetched < pagesToFetch) {
+            val page = fetch(cursor)
+            results += page.items
+            cursor = page.nextPage
+            pagesFetched++
+        }
+        if (results.size == before && pagesFetched <= 1 && randomizeStart) {
+            results += fetch("1").items
+        }
+    }
+
+    /**
      * Fetches several pages of wallpapers per configured + enabled source for the currently
-     * selected categories. Calls [WallpaperSource.browse] directly (bypassing Paging 3) to
-     * avoid its infrastructure overhead in a background context.
+     * selected categories AND custom keyword topics.
+     * Calls [WallpaperSource.browse]/[WallpaperSource.search] directly (bypassing Paging 3)
+     * to avoid its infrastructure overhead in a background context.
      *
-     * Pulls up to [PAGES_PER_SOURCE] pages (following each source's [Page.nextPage] cursor)
-     * instead of just page "1" so the candidate pool — and therefore the no-repeat window in
-     * [RotationEngine] — isn't capped at a single small, unchanging page of results.
+     * Built-in categories are queried in one combined [WallpaperSource.browse] call per
+     * source; each custom keyword is queried separately via [WallpaperSource.search] — the
+     * same split the main browse screen ([MultiSourcePagingSource]) uses. Previously this
+     * function only read [SettingsRepository.selectedCategories] and called `browse()`,
+     * so custom keywords were silently ignored during rotation — and if the user cleared
+     * every built-in category to rely on a custom keyword alone, the empty-categories
+     * fallback pulled in *every* built-in category instead, which looked like pure random.
+     *
+     * The per-source page budget ([PAGES_PER_SOURCE]) is split evenly across however many
+     * topics (categories-as-one-topic + each keyword) are active, so adding keywords doesn't
+     * multiply the number of network calls per source.
      *
      * For sources that rank results deterministically by popularity/relevance
      * ([RANDOM_START_SOURCES]), the starting page is randomized each call — otherwise every
@@ -221,36 +262,40 @@ class NextWallpaperUseCase @Inject constructor(
      */
     private suspend fun getCategoryBrowseCandidates(): List<Wallpaper> {
         val enabledSources = settingsRepository.enabledSources.first()
-        val categories = settingsRepository.selectedCategories.first()
-            .toList()
-            .ifEmpty { Category.entries.toList() }
+        val selectedCategories = settingsRepository.selectedCategories.first().toList()
+        val customKeywords = settingsRepository.customKeywords.first().toList()
+
+        // Only fall back to "every built-in category" when the user has configured
+        // nothing at all — not when they deliberately left only custom keywords active.
+        val categoryTopic: List<Category> = selectedCategories.ifEmpty {
+            if (customKeywords.isEmpty()) Category.entries.toList() else emptyList()
+        }
+
+        val topicCount = (if (categoryTopic.isNotEmpty()) 1 else 0) + customKeywords.size
+        val pagesPerTopic = (PAGES_PER_SOURCE / topicCount.coerceAtLeast(1)).coerceAtLeast(1)
 
         val results = mutableListOf<Wallpaper>()
         for (source in sources) {
             if (!source.isConfigured || source.id !in enabledSources) continue
-            try {
-                var cursor: String? = if (source.id in RANDOM_START_SOURCES) {
-                    Random.nextInt(1, RANDOM_START_PAGE_MAX + 1).toString()
-                } else {
-                    "1"
+            val randomize = source.id in RANDOM_START_SOURCES
+
+            if (categoryTopic.isNotEmpty()) {
+                try {
+                    fetchTopicPages(results, randomize, pagesPerTopic) { page ->
+                        source.browse(categories = categoryTopic, page = page)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Source ${source.id} failed during rotation category fetch: ${e.message}")
                 }
-                var pagesFetched = 0
-                while (cursor != null && pagesFetched < PAGES_PER_SOURCE) {
-                    val page = source.browse(categories = categories, page = cursor)
-                    results += page.items
-                    cursor = page.nextPage
-                    pagesFetched++
+            }
+            for (keyword in customKeywords) {
+                try {
+                    fetchTopicPages(results, randomize, pagesPerTopic) { page ->
+                        source.search(query = keyword, page = page)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Source ${source.id} failed during rotation keyword '$keyword' fetch: ${e.message}")
                 }
-                // A random start page can land past the end of a narrow-category query
-                // (empty result, nextPage = null) — fall back to page "1" so the source
-                // still contributes something to the pool this cycle.
-                val gotNothing = results.none { it.sourceId == source.id }
-                if (gotNothing && pagesFetched <= 1 && source.id in RANDOM_START_SOURCES) {
-                    val fallback = source.browse(categories = categories, page = "1")
-                    results += fallback.items
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Source ${source.id} failed during rotation fetch: ${e.message}")
             }
         }
         return results
