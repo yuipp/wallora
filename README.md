@@ -272,4 +272,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Photo content is served from third-party APIs per each source's license. See Settings → About for per-source attribution.
+Photo content is served from third-party APIs per each source's license. See Settings → About for per- source attribution.
