@@ -22,6 +22,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
 
 /** Outcome returned to the caller (WorkManager, AlarmReceiver, engine). */
 sealed class NextWallpaperResult {
@@ -60,6 +61,21 @@ class NextWallpaperUseCase @Inject constructor(
         private const val TAG = "NextWallpaper"
         private const val MAX_NO_REPEAT_WINDOW = 30
         private const val PAGES_PER_SOURCE = 4
+
+        /**
+         * These sources rank results deterministically (popularity / relevance /
+         * interestingness) with no per-request randomization. Always starting at page "1"
+         * means every rotation cycle re-fetches the exact same top-ranked slice, so the
+         * candidate pool never actually changes. Jumping into a random window of the
+         * result set on each fetch gives real variety instead.
+         */
+        private val RANDOM_START_SOURCES = setOf(
+            SourceId.UNSPLASH, SourceId.PEXELS, SourceId.PIXABAY, SourceId.FLICKR,
+        )
+
+        /** Upper bound for the randomized starting page — keep modest so narrow-category
+         *  queries (fewer total results) still land on a page that has content. */
+        private const val RANDOM_START_PAGE_MAX = 6
     }
 
     /**
@@ -197,6 +213,11 @@ class NextWallpaperUseCase @Inject constructor(
      * Pulls up to [PAGES_PER_SOURCE] pages (following each source's [Page.nextPage] cursor)
      * instead of just page "1" so the candidate pool — and therefore the no-repeat window in
      * [RotationEngine] — isn't capped at a single small, unchanging page of results.
+     *
+     * For sources that rank results deterministically by popularity/relevance
+     * ([RANDOM_START_SOURCES]), the starting page is randomized each call — otherwise every
+     * rotation cycle would re-fetch the exact same top-ranked slice and the pool would never
+     * actually change, no matter how many pages deep we walk from page 1.
      */
     private suspend fun getCategoryBrowseCandidates(): List<Wallpaper> {
         val enabledSources = settingsRepository.enabledSources.first()
@@ -208,13 +229,25 @@ class NextWallpaperUseCase @Inject constructor(
         for (source in sources) {
             if (!source.isConfigured || source.id !in enabledSources) continue
             try {
-                var cursor: String? = "1"
+                var cursor: String? = if (source.id in RANDOM_START_SOURCES) {
+                    Random.nextInt(1, RANDOM_START_PAGE_MAX + 1).toString()
+                } else {
+                    "1"
+                }
                 var pagesFetched = 0
                 while (cursor != null && pagesFetched < PAGES_PER_SOURCE) {
                     val page = source.browse(categories = categories, page = cursor)
                     results += page.items
                     cursor = page.nextPage
                     pagesFetched++
+                }
+                // A random start page can land past the end of a narrow-category query
+                // (empty result, nextPage = null) — fall back to page "1" so the source
+                // still contributes something to the pool this cycle.
+                val gotNothing = results.none { it.sourceId == source.id }
+                if (gotNothing && pagesFetched <= 1 && source.id in RANDOM_START_SOURCES) {
+                    val fallback = source.browse(categories = categories, page = "1")
+                    results += fallback.items
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Source ${source.id} failed during rotation fetch: ${e.message}")
