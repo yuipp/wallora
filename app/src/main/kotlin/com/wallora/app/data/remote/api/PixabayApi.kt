@@ -24,7 +24,16 @@ interface PixabayApi {
         @Query("per_page") perPage: Int = PAGE_SIZE,
         @Query("page") page: Int = 1,
     ): PixabayResponse
-
+    /**
+     * Look up specific images by ID (comma-separated) — used to get fresh URLs for saved
+     * history/favorites, since Pixabay's webformatURL is only valid for 24 hours.
+     */
+    @GET("api/")
+    suspend fun byIds(
+        @Query("key") key: String,
+        @Query("id") ids: String,
+        @Query("per_page") perPage: Int = 200,
+    ): PixabayResponse
     companion object {
         const val PAGE_SIZE = 20
     }
