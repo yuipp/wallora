@@ -1,5 +1,6 @@
 package com.wallora.app.data.remote
 
+import android.util.Log
 import com.wallora.app.data.remote.api.PixabayApi
 import com.wallora.app.data.remote.dto.PixabayHit
 import com.wallora.app.di.UserKeyCache
@@ -8,6 +9,7 @@ import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.Page
 import com.wallora.app.domain.model.SourceId
 import com.wallora.app.domain.model.Wallpaper
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,6 +18,12 @@ class PixabaySource @Inject constructor(
     private val api: PixabayApi,
     private val userKeyCache: UserKeyCache,
 ) : WallpaperSource {
+
+    private companion object {
+        const val TAG = "PixabaySource"
+        const val BATCH_SIZE = 25
+        const val MAX_SINGLE_LOOKUPS = 40
+    }
 
     override val id: SourceId = SourceId.PIXABAY
     override val isConfigured: Boolean get() = userKeyCache.effectivePixabayKey.isNotBlank()
@@ -31,14 +39,46 @@ class PixabaySource @Inject constructor(
         val pageNum = page.toIntOrNull() ?: 1
         return fetchPage(query, pageNum)
     }
+
     /** Fresh copies (with new, valid URLs) of the given Pixabay image IDs. */
     suspend fun fetchByIds(ids: List<String>): List<Wallpaper> {
         val key = userKeyCache.effectivePixabayKey
         if (key.isBlank() || ids.isEmpty()) return emptyList()
-        return ids.chunked(100).flatMap { chunk ->
-            api.byIds(key = key, ids = chunk.joinToString(",")).hits.map { it.toDomain() }
+
+        val out = mutableListOf<Wallpaper>()
+        var batchRejected = false
+        var singleLookupsLeft = MAX_SINGLE_LOOKUPS
+        for (chunk in ids.chunked(BATCH_SIZE)) {
+            if (!batchRejected) {
+                try {
+                    out += api.byIds(key = key, ids = chunk.joinToString(",")).hits.map { it.toDomain() }
+                    continue
+                } catch (e: HttpException) {
+                    if (e.code() != 400) throw e
+                    Log.w(TAG, "Batch id lookup rejected: HTTP 400 body=${e.errorBodyText()} (batch=${chunk.size})")
+                    batchRejected = true
+                }
+            }
+            // Batch (comma-separated) lookup not accepted — fall back to one ID per request,
+            // bounded so we never burn through Pixabay's 100 requests/60s limit.
+            for (id in chunk) {
+                if (singleLookupsLeft <= 0) return out
+                singleLookupsLeft--
+                try {
+                    out += api.byIds(key = key, ids = id).hits.map { it.toDomain() }
+                } catch (e: HttpException) {
+                    if (e.code() == 429) throw e
+                    Log.w(TAG, "Single id lookup rejected: HTTP ${e.code()} id=$id body=${e.errorBodyText()}")
+                    return out // single lookups don't work either — stop, don't spam
+                }
+            }
         }
+        return out
     }
+
+    private fun HttpException.errorBodyText(): String =
+        try { response()?.errorBody()?.string()?.take(300).orEmpty() } catch (_: Exception) { "" }
+
     private suspend fun fetchPage(query: String, pageNum: Int): Page<Wallpaper> {
         val key = userKeyCache.effectivePixabayKey
         val resp = api.search(key = key, query = query, page = pageNum)
