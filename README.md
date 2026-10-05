@@ -4,14 +4,14 @@
 
 Browse, search, and auto-rotate stunning wallpapers from Pexels, Wallhaven, Unsplash, and Reddit. Wallora is the only free app that ties all of this together: a live wallpaper engine with Material You colour extraction, gesture-based wallpaper swapping from any launcher, a Quick Settings tile, and a home-screen widget — features that are either missing from other apps or locked behind a paywall.
 
-[![Build](https://github.com/thissayantan/wallora/actions/workflows/release.yml/badge.svg)](https://github.com/thissayantan/wallora/actions/workflows/release.yml)
+[![Build](https://github.com/yuipp/wallora/actions/workflows/release.yml/badge.svg)](https://github.com/yuipp/wallora/actions/workflows/release.yml)
 [![API](https://img.shields.io/badge/API-31%2B-blue)](https://developer.android.com/about/versions/12/android-12)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-purple)](https://kotlinlang.org)
 
 <p align="center">
-  <a href="https://github.com/thissayantan/wallora/releases/latest">
-    <img src="https://img.shields.io/github/v/release/thissayantan/wallora?style=for-the-badge&color=6750A4&logo=android&logoColor=white&label=Download%20APK" alt="Download latest APK">
+  <a href="https://github.com/yuipp/wallora/releases/latest">
+    <img src="https://img.shields.io/github/v/release/yuipp/wallora?style=for-the-badge&color=6750A4&logo=android&logoColor=white&label=Download%20APK" alt="Download latest APK">
   </a>
   &nbsp;
   <a href="https://apt.izzysoft.de/fdroid/index/apk/com.wallora.app">
@@ -135,7 +135,7 @@ In Tasker: **Task → App → Send Intent** with the values above.
    ```
 3. Search for **Wallora** and install it — F-Droid will keep it up to date automatically.
 
-> **Note:** The IzzyOnDroid listing goes live once the inclusion request is accepted. Until then, sideload the APK from [Releases](https://github.com/thissayantan/wallora/releases/latest).
+> **Note:** The IzzyOnDroid listing goes live once the inclusion request is accepted. Until then, sideload the APK from [Releases](https://github.com/yuipp/wallora/releases/latest).
 
 ### Quick build
 
