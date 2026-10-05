@@ -1,5 +1,6 @@
 package com.wallora.app.ui.components
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.wallora.app.domain.model.Wallpaper
 
@@ -92,7 +94,27 @@ fun WallpaperThumbCard(
         .data(wallpaper.thumbUrl)
         .diskCacheKey(wallpaper.globalKey + "_thumb")
         .crossfade(true)
+        .listener(
+            onError = { _, result ->
+                Log.w(
+                    "WallpaperThumbCard",
+                    "Thumb load failed: source=${wallpaper.sourceId} key=${wallpaper.globalKey} " +
+                        "url=${wallpaper.thumbUrl} cause=${result.throwable}",
+                )
+            },
+        )
         .build()
+
+    // Falls back to the full-resolution image if the thumbnail URL fails to load (dead/blocked
+    // CDN link, decode error, etc.) instead of leaving a blank surfaceVariant-colored box —
+    // heavier, but guarantees something is shown whenever the full image is actually reachable.
+    val fallbackPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(wallpaper.fullUrl)
+            .diskCacheKey(wallpaper.globalKey + "_full")
+            .crossfade(true)
+            .build(),
+    )
 
     Card(
         modifier = modifier
@@ -106,6 +128,7 @@ fun WallpaperThumbCard(
             model = imageRequest,
             contentDescription = wallpaper.author,
             contentScale = ContentScale.Crop,
+            error = fallbackPainter,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceVariant),
