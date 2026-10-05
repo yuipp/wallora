@@ -25,6 +25,9 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
     suspend fun getAll(): List<FavoriteEntity>
 
+    @Query("UPDATE favorites SET thumbUrl = :thumbUrl, fullUrl = :fullUrl WHERE globalKey = :globalKey")
+    suspend fun updateUrls(globalKey: String, thumbUrl: String, fullUrl: String)
+
     @Query("SELECT COUNT(*) FROM favorites")
     suspend fun count(): Int
 }
