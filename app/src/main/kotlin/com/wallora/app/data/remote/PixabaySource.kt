@@ -31,7 +31,14 @@ class PixabaySource @Inject constructor(
         val pageNum = page.toIntOrNull() ?: 1
         return fetchPage(query, pageNum)
     }
-
+    /** Fresh copies (with new, valid URLs) of the given Pixabay image IDs. */
+    suspend fun fetchByIds(ids: List<String>): List<Wallpaper> {
+        val key = userKeyCache.effectivePixabayKey
+        if (key.isBlank() || ids.isEmpty()) return emptyList()
+        return ids.chunked(100).flatMap { chunk ->
+            api.byIds(key = key, ids = chunk.joinToString(",")).hits.map { it.toDomain() }
+        }
+    }
     private suspend fun fetchPage(query: String, pageNum: Int): Page<Wallpaper> {
         val key = userKeyCache.effectivePixabayKey
         val resp = api.search(key = key, query = query, page = pageNum)
