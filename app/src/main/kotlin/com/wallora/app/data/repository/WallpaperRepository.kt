@@ -40,44 +40,58 @@ class WallpaperRepository @Inject constructor(
         private const val TAG = "WallpaperRepository"
         private const val PAGE_SIZE = 20
         private const val CACHE_TTL_MS = 3_600_000L // 1 hour
-        // Pixabay documents webformatURL as valid for 24h; re-resolve saved items at most hourly.
-        private const val PIXABAY_REFRESH_INTERVAL_MS = 3_600_000L
-        // After a failed attempt, wait before retrying so reopening History doesn't spam the API.
+        // Pixabay documents webformatURL as valid for 24h; re-resolve saved items well before that.
+        private const val PIXABAY_URL_FRESH_MS = 12 * 3_600_000L
+        // One lookup request per image (~0.8s each via throttle) — cap work per pass; remaining
+        // items are picked up by the next pass. Gap keeps us under Pixabay's 100 req / 60s limit.
+        private const val PIXABAY_MAX_PER_PASS = 60
+        private const val PIXABAY_PASS_GAP_MS = 60_000L
+        // After a failed attempt (rate limit / offline), wait before retrying.
         private const val PIXABAY_RETRY_BACKOFF_MS = 300_000L
     }
 
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pixabayRefreshMutex = kotlinx.coroutines.sync.Mutex()
-    @Volatile private var lastPixabayRefreshMs = 0L
+    private val pixabayRefreshedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var lastPixabayPassMs = 0L
     @Volatile private var lastPixabayFailureMs = 0L
 
     /**
      * Pixabay image URLs expire after 24h, so thumbs/full URLs stored in history and favorites
-     * go dead (HTTP 400). Re-fetch them by image ID and update the stored rows. Throttled, and
-     * only marks itself done after a successful pass so a failed (offline) attempt is retried.
+     * go dead (HTTP 400). Re-fetch them by image ID (newest first) and update each stored row
+     * as soon as its fresh URL arrives, so tiles fix themselves one by one. Runs in the
+     * background; a pass already in progress or a recent one makes this a no-op.
      */
     suspend fun refreshPixabayUrls() {
         val pixabay = sources.filterIsInstance<PixabaySource>().firstOrNull() ?: return
         if (!pixabay.isConfigured) return
-        pixabayRefreshMutex.lock()
+        if (!pixabayRefreshMutex.tryLock()) return
         try {
             val now = System.currentTimeMillis()
-            if (now - lastPixabayRefreshMs < PIXABAY_REFRESH_INTERVAL_MS) return
+            if (now - lastPixabayPassMs < PIXABAY_PASS_GAP_MS) return
             if (now - lastPixabayFailureMs < PIXABAY_RETRY_BACKOFF_MS) return
             val prefix = SourceId.PIXABAY.name
             val histKeys = historyDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
             val favKeys = favoriteDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
-            val ids = (histKeys + favKeys).map { it.second }.distinct()
-            if (ids.isEmpty()) { lastPixabayRefreshMs = now; return }
-            val fresh = pixabay.fetchByIds(ids).associateBy { it.id }
-            for ((key, id) in histKeys) fresh[id]?.let { historyDao.updateUrls(key, it.thumbUrl, it.fullUrl) }
-            for ((key, id) in favKeys) fresh[id]?.let { favoriteDao.updateUrls(key, it.thumbUrl, it.fullUrl) }
-            lastPixabayRefreshMs = now
-            Log.d(TAG, "Pixabay URLs refreshed: requested=${ids.size} returned=${fresh.size}")
+            val todo = (histKeys + favKeys).map { it.second }.distinct()
+                .filter { now - (pixabayRefreshedAt[it] ?: 0L) > PIXABAY_URL_FRESH_MS }
+                .take(PIXABAY_MAX_PER_PASS)
+            if (todo.isEmpty()) return
+            var updated = 0
+            for (id in todo) {
+                val fresh = pixabay.fetchById(id)
+                pixabayRefreshedAt[id] = System.currentTimeMillis() // also on null: don't retry dead IDs every pass
+                if (fresh == null) continue
+                for ((key, hid) in histKeys) if (hid == id) historyDao.updateUrls(key, fresh.thumbUrl, fresh.fullUrl)
+                for ((key, fid) in favKeys) if (fid == id) favoriteDao.updateUrls(key, fresh.thumbUrl, fresh.fullUrl)
+                updated++
+            }
+            Log.w(TAG, "Pixabay URLs refreshed: requested=${todo.size} updated=$updated")
         } catch (e: Exception) {
             lastPixabayFailureMs = System.currentTimeMillis()
             Log.w(TAG, "Pixabay URL refresh failed: ${e.message}")
         } finally {
+            lastPixabayPassMs = System.currentTimeMillis()
             pixabayRefreshMutex.unlock()
         }
     }
@@ -239,7 +253,7 @@ class WallpaperRepository @Inject constructor(
 
     /** Snapshot of all favorited wallpapers (newest first). Used by rotation playlist. */
     suspend fun getFavoritesSnapshot(): List<Wallpaper> {
-        refreshPixabayUrls()
+        refreshScope.launch { refreshPixabayUrls() }
         return favoriteDao.getAll().sortedByDescending { it.addedAt }.map { entity ->
             Wallpaper(
                 id = entity.id,
