@@ -21,8 +21,6 @@ class PixabaySource @Inject constructor(
 
     private companion object {
         const val TAG = "PixabaySource"
-        const val BATCH_SIZE = 25
-        const val MAX_SINGLE_LOOKUPS = 40
     }
 
     override val id: SourceId = SourceId.PIXABAY
@@ -40,40 +38,22 @@ class PixabaySource @Inject constructor(
         return fetchPage(query, pageNum)
     }
 
-    /** Fresh copies (with new, valid URLs) of the given Pixabay image IDs. */
-    suspend fun fetchByIds(ids: List<String>): List<Wallpaper> {
+    /**
+     * Fresh copy (with new, valid URLs) of one Pixabay image by ID, or null if Pixabay rejects
+     * or no longer has it. Pixabay does NOT accept comma-separated ID lists (HTTP 400
+     * "Invalid value for id"), so lookups are one request per image. Rate-limit (429) and
+     * network errors are thrown so the caller can stop the whole pass.
+     */
+    suspend fun fetchById(id: String): Wallpaper? {
         val key = userKeyCache.effectivePixabayKey
-        if (key.isBlank() || ids.isEmpty()) return emptyList()
-
-        val out = mutableListOf<Wallpaper>()
-        var batchRejected = false
-        var singleLookupsLeft = MAX_SINGLE_LOOKUPS
-        for (chunk in ids.chunked(BATCH_SIZE)) {
-            if (!batchRejected) {
-                try {
-                    out += api.byIds(key = key, ids = chunk.joinToString(",")).hits.map { it.toDomain() }
-                    continue
-                } catch (e: HttpException) {
-                    if (e.code() != 400) throw e
-                    Log.w(TAG, "Batch id lookup rejected: HTTP 400 body=${e.errorBodyText()} (batch=${chunk.size})")
-                    batchRejected = true
-                }
-            }
-            // Batch (comma-separated) lookup not accepted — fall back to one ID per request,
-            // bounded so we never burn through Pixabay's 100 requests/60s limit.
-            for (id in chunk) {
-                if (singleLookupsLeft <= 0) return out
-                singleLookupsLeft--
-                try {
-                    out += api.byIds(key = key, ids = id).hits.map { it.toDomain() }
-                } catch (e: HttpException) {
-                    if (e.code() == 429) throw e
-                    Log.w(TAG, "Single id lookup rejected: HTTP ${e.code()} id=$id body=${e.errorBodyText()}")
-                    return out // single lookups don't work either — stop, don't spam
-                }
-            }
+        if (key.isBlank()) return null
+        return try {
+            api.byIds(key = key, ids = id, perPage = 3).hits.firstOrNull()?.toDomain()
+        } catch (e: HttpException) {
+            if (e.code() == 429) throw e
+            Log.w(TAG, "ID lookup rejected: HTTP ${e.code()} id=$id body=${e.errorBodyText()}")
+            null
         }
-        return out
     }
 
     private fun HttpException.errorBodyText(): String =
