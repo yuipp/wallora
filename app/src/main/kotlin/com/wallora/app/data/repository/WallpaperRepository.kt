@@ -42,11 +42,14 @@ class WallpaperRepository @Inject constructor(
         private const val CACHE_TTL_MS = 3_600_000L // 1 hour
         // Pixabay documents webformatURL as valid for 24h; re-resolve saved items at most hourly.
         private const val PIXABAY_REFRESH_INTERVAL_MS = 3_600_000L
+        // After a failed attempt, wait before retrying so reopening History doesn't spam the API.
+        private const val PIXABAY_RETRY_BACKOFF_MS = 300_000L
     }
 
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pixabayRefreshMutex = kotlinx.coroutines.sync.Mutex()
     @Volatile private var lastPixabayRefreshMs = 0L
+    @Volatile private var lastPixabayFailureMs = 0L
 
     /**
      * Pixabay image URLs expire after 24h, so thumbs/full URLs stored in history and favorites
@@ -60,6 +63,7 @@ class WallpaperRepository @Inject constructor(
         try {
             val now = System.currentTimeMillis()
             if (now - lastPixabayRefreshMs < PIXABAY_REFRESH_INTERVAL_MS) return
+            if (now - lastPixabayFailureMs < PIXABAY_RETRY_BACKOFF_MS) return
             val prefix = SourceId.PIXABAY.name
             val histKeys = historyDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
             val favKeys = favoriteDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
@@ -71,6 +75,7 @@ class WallpaperRepository @Inject constructor(
             lastPixabayRefreshMs = now
             Log.d(TAG, "Pixabay URLs refreshed: requested=${ids.size} returned=${fresh.size}")
         } catch (e: Exception) {
+            lastPixabayFailureMs = System.currentTimeMillis()
             Log.w(TAG, "Pixabay URL refresh failed: ${e.message}")
         } finally {
             pixabayRefreshMutex.unlock()
