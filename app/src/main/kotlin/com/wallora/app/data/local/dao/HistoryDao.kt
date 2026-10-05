@@ -21,7 +21,10 @@ interface HistoryDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM history WHERE globalKey = :globalKey)")
     suspend fun exists(globalKey: String): Boolean
-
+    
+    @Query("UPDATE history SET thumbUrl = :thumbUrl, fullUrl = :fullUrl WHERE globalKey = :globalKey")
+    suspend fun updateUrls(globalKey: String, thumbUrl: String, fullUrl: String)
+    
     @Query("DELETE FROM history")
     suspend fun deleteAll()
 
