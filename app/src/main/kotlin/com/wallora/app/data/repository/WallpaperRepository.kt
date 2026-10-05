@@ -10,13 +10,19 @@ import com.wallora.app.data.local.dao.WallpaperDao
 import com.wallora.app.data.local.entity.FavoriteEntity
 import com.wallora.app.data.local.entity.HistoryEntity
 import com.wallora.app.data.paging.MultiSourcePagingSource
+import com.wallora.app.data.remote.PixabaySource
 import com.wallora.app.di.SessionSeed
 import com.wallora.app.domain.WallpaperSource
 import com.wallora.app.domain.model.Category
 import com.wallora.app.domain.model.SourceId
 import com.wallora.app.domain.model.Wallpaper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +40,41 @@ class WallpaperRepository @Inject constructor(
         private const val TAG = "WallpaperRepository"
         private const val PAGE_SIZE = 20
         private const val CACHE_TTL_MS = 3_600_000L // 1 hour
+        // Pixabay documents webformatURL as valid for 24h; re-resolve saved items at most hourly.
+        private const val PIXABAY_REFRESH_INTERVAL_MS = 3_600_000L
+    }
+
+    private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pixabayRefreshMutex = kotlinx.coroutines.sync.Mutex()
+    @Volatile private var lastPixabayRefreshMs = 0L
+
+    /**
+     * Pixabay image URLs expire after 24h, so thumbs/full URLs stored in history and favorites
+     * go dead (HTTP 400). Re-fetch them by image ID and update the stored rows. Throttled, and
+     * only marks itself done after a successful pass so a failed (offline) attempt is retried.
+     */
+    suspend fun refreshPixabayUrls() {
+        val pixabay = sources.filterIsInstance<PixabaySource>().firstOrNull() ?: return
+        if (!pixabay.isConfigured) return
+        pixabayRefreshMutex.lock()
+        try {
+            val now = System.currentTimeMillis()
+            if (now - lastPixabayRefreshMs < PIXABAY_REFRESH_INTERVAL_MS) return
+            val prefix = SourceId.PIXABAY.name
+            val histKeys = historyDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
+            val favKeys = favoriteDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
+            val ids = (histKeys + favKeys).map { it.second }.distinct()
+            if (ids.isEmpty()) { lastPixabayRefreshMs = now; return }
+            val fresh = pixabay.fetchByIds(ids).associateBy { it.id }
+            for ((key, id) in histKeys) fresh[id]?.let { historyDao.updateUrls(key, it.thumbUrl, it.fullUrl) }
+            for ((key, id) in favKeys) fresh[id]?.let { favoriteDao.updateUrls(key, it.thumbUrl, it.fullUrl) }
+            lastPixabayRefreshMs = now
+            Log.d(TAG, "Pixabay URLs refreshed: requested=${ids.size} returned=${fresh.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Pixabay URL refresh failed: ${e.message}")
+        } finally {
+            pixabayRefreshMutex.unlock()
+        }
     }
 
     /**
@@ -97,7 +138,7 @@ class WallpaperRepository @Inject constructor(
     // ── Favorites ────────────────────────────────────────────────────────────
 
     fun observeFavorites(): Flow<List<Wallpaper>> =
-        favoriteDao.observeAll().map { list ->
+        favoriteDao.observeAll().onStart { refreshScope.launch { refreshPixabayUrls() } }.map { list ->
             list.map { entity ->
                 Wallpaper(
                     id = entity.id,
@@ -142,7 +183,7 @@ class WallpaperRepository @Inject constructor(
     // ── History ──────────────────────────────────────────────────────────────
 
     fun observeHistory(): Flow<List<Wallpaper>> =
-        historyDao.observeAll().map { list ->
+        historyDao.observeAll().onStart { refreshScope.launch { refreshPixabayUrls() } }.map { list ->
             list.map { entity ->
                 Wallpaper(
                     id = entity.id,
@@ -192,8 +233,9 @@ class WallpaperRepository @Inject constructor(
             .map { it.globalKey }
 
     /** Snapshot of all favorited wallpapers (newest first). Used by rotation playlist. */
-    suspend fun getFavoritesSnapshot(): List<Wallpaper> =
-        favoriteDao.getAll().sortedByDescending { it.addedAt }.map { entity ->
+    suspend fun getFavoritesSnapshot(): List<Wallpaper> {
+        refreshPixabayUrls()
+        return favoriteDao.getAll().sortedByDescending { it.addedAt }.map { entity ->
             Wallpaper(
                 id = entity.id,
                 sourceId = SourceId.valueOf(entity.sourceId),
@@ -207,6 +249,7 @@ class WallpaperRepository @Inject constructor(
                 colorHint = entity.colorHint,
             )
         }
+    }
 
     // ── Cache maintenance ─────────────────────────────────────────────────────
 
