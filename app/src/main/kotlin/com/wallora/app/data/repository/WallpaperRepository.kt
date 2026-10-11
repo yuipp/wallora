@@ -44,7 +44,7 @@ class WallpaperRepository @Inject constructor(
         private const val PIXABAY_URL_FRESH_MS = 12 * 3_600_000L
         // One lookup request per image (~0.8s each via throttle) — cap work per pass; remaining
         // items are picked up by the next pass. Gap keeps us under Pixabay's 100 req / 60s limit.
-        private const val PIXABAY_MAX_PER_PASS = 60
+        private const val PIXABAY_MAX_PER_PASS = 150
         private const val PIXABAY_PASS_GAP_MS = 60_000L
         // After a failed attempt (rate limit / offline), wait before retrying.
         private const val PIXABAY_RETRY_BACKOFF_MS = 300_000L
@@ -58,7 +58,7 @@ class WallpaperRepository @Inject constructor(
 
     /**
      * Pixabay image URLs expire after 24h, so thumbs/full URLs stored in history and favorites
-     * go dead (HTTP 400). Re-fetch them by image ID (newest first) and update each stored row
+     * go dead (HTTP 400). Re-fetch them by image ID (favorites first, then history) and update each stored row
      * as soon as its fresh URL arrives, so tiles fix themselves one by one. Runs in the
      * background; a pass already in progress or a recent one makes this a no-op.
      */
@@ -73,12 +73,15 @@ class WallpaperRepository @Inject constructor(
             val prefix = SourceId.PIXABAY.name
             val histKeys = historyDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
             val favKeys = favoriteDao.getAll().filter { it.sourceId == prefix }.map { it.globalKey to it.id }
-            val todo = (histKeys + favKeys).map { it.second }.distinct()
+            // Favorites first (the ones the user cares about and rotates through), then history.
+            val todo = (favKeys + histKeys).map { it.second }.distinct()
                 .filter { now - (pixabayRefreshedAt[it] ?: 0L) > PIXABAY_URL_FRESH_MS }
                 .take(PIXABAY_MAX_PER_PASS)
             if (todo.isEmpty()) return
+            Log.w(TAG, "Pixabay refresh pass started: todo=${todo.size} (favorites=${favKeys.size}, history=${histKeys.size})")
             var updated = 0
-            for (id in todo) {
+            for ((index, id) in todo.withIndex()) {
+                if (index > 0 && index % 25 == 0) Log.w(TAG, "Pixabay refresh progress: $index/${todo.size}, updated=$updated")
                 val fresh = pixabay.fetchById(id)
                 pixabayRefreshedAt[id] = System.currentTimeMillis() // also on null: don't retry dead IDs every pass
                 if (fresh == null) continue
