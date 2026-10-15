@@ -34,9 +34,11 @@ class NextWallpaperAction : ActionCallback {
         )
         val useCase = entryPoint.nextWallpaperUseCase()
         // Invoke directly — onAction is already a suspend function called from a coroutine
-        Log.d(TAG, "Widget tapped — applying next wallpaper")
+        val t0 = System.currentTimeMillis()
+        Log.w(TAG, "Widget tapped — applying next wallpaper")
         when (val result = useCase(WallpaperTarget.BOTH)) {
-            is NextWallpaperResult.Applied -> Log.d(TAG, "Applied: ${result.wallpaper.globalKey}")
+            is NextWallpaperResult.Applied ->
+                Log.w(TAG, "Applied: ${result.wallpaper.globalKey} in ${System.currentTimeMillis() - t0} ms")
             is NextWallpaperResult.NoPlaylist -> Log.w(TAG, "No playlist")
             is NextWallpaperResult.Failure -> Log.e(TAG, "Failed: ${result.message}")
         }
