@@ -16,6 +16,9 @@ import com.wallora.app.domain.rotation.RotationEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -117,8 +120,16 @@ class NextWallpaperUseCase @Inject constructor(
         }
 
         // Normal path: pick from candidate cache or API
+        // Cold start (fresh process, e.g. widget/gesture tap): the in-memory cache is empty.
+        // Build a small pool fast — one page per topic — so the tap applies a wallpaper within
+        // seconds instead of crawling several pages per source through per-request throttles.
+        // The full, larger pool is built afterwards by scheduleBackgroundPrefetch().
         val candidates = candidateCache.ifEmpty {
-            getCandidates(playlistMode).also { candidateCache = it }
+            val t0 = System.currentTimeMillis()
+            getCandidates(playlistMode, quick = true).also {
+                candidateCache = it
+                Log.w(TAG, "Cold-start candidate fetch: ${it.size} items in ${System.currentTimeMillis() - t0} ms")
+            }
         }
         if (candidates.isEmpty()) {
             Log.w(TAG, "No candidates for playlist=$playlistMode")
@@ -200,10 +211,10 @@ class NextWallpaperUseCase @Inject constructor(
         false
     }
 
-    private suspend fun getCandidates(playlistMode: String): List<Wallpaper> =
+    private suspend fun getCandidates(playlistMode: String, quick: Boolean = false): List<Wallpaper> =
         when (playlistMode) {
             "FAVORITES" -> repository.getFavoritesSnapshot()
-            else -> getCategoryBrowseCandidates()
+            else -> getCategoryBrowseCandidates(quick)
         }
 
     /**
@@ -260,7 +271,7 @@ class NextWallpaperUseCase @Inject constructor(
      * rotation cycle would re-fetch the exact same top-ranked slice and the pool would never
      * actually change, no matter how many pages deep we walk from page 1.
      */
-    private suspend fun getCategoryBrowseCandidates(): List<Wallpaper> {
+    private suspend fun getCategoryBrowseCandidates(quick: Boolean = false): List<Wallpaper> {
         val enabledSources = settingsRepository.enabledSources.first()
         val selectedCategories = settingsRepository.selectedCategories.first().toList()
         val customKeywords = settingsRepository.customKeywords.first().toList()
@@ -272,32 +283,45 @@ class NextWallpaperUseCase @Inject constructor(
         }
 
         val topicCount = (if (categoryTopic.isNotEmpty()) 1 else 0) + customKeywords.size
-        val pagesPerTopic = (PAGES_PER_SOURCE / topicCount.coerceAtLeast(1)).coerceAtLeast(1)
-
-        val results = mutableListOf<Wallpaper>()
-        for (source in sources) {
-            if (!source.isConfigured || source.id !in enabledSources) continue
-            val randomize = source.id in RANDOM_START_SOURCES
-
-            if (categoryTopic.isNotEmpty()) {
-                try {
-                    fetchTopicPages(results, randomize, pagesPerTopic) { page ->
-                        source.browse(categories = categoryTopic, page = page)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Source ${source.id} failed during rotation category fetch: ${e.message}")
-                }
-            }
-            for (keyword in customKeywords) {
-                try {
-                    fetchTopicPages(results, randomize, pagesPerTopic) { page ->
-                        source.search(query = keyword, page = page)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Source ${source.id} failed during rotation keyword '$keyword' fetch: ${e.message}")
-                }
-            }
+        val pagesPerTopic = if (quick) {
+            1
+        } else {
+            (PAGES_PER_SOURCE / topicCount.coerceAtLeast(1)).coerceAtLeast(1)
         }
-        return results
+
+        // Sources are queried in parallel (each has its own throttled HTTP client), so wall
+        // time is that of the slowest source rather than the sum over all of them.
+        return coroutineScope {
+            sources
+                .filter { it.isConfigured && it.id in enabledSources }
+                .map { source ->
+                    async {
+                        val results = mutableListOf<Wallpaper>()
+                        val randomize = source.id in RANDOM_START_SOURCES
+
+                        if (categoryTopic.isNotEmpty()) {
+                            try {
+                                fetchTopicPages(results, randomize, pagesPerTopic) { page ->
+                                    source.browse(categories = categoryTopic, page = page)
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Source ${source.id} failed during rotation category fetch: ${e.message}")
+                            }
+                        }
+                        for (keyword in customKeywords) {
+                            try {
+                                fetchTopicPages(results, randomize, pagesPerTopic) { page ->
+                                    source.search(query = keyword, page = page)
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Source ${source.id} failed during rotation keyword '$keyword' fetch: ${e.message}")
+                            }
+                        }
+                        results
+                    }
+                }
+                .awaitAll()
+                .flatten()
+        }
     }
 }
