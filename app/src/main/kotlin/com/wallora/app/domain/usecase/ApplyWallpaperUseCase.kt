@@ -94,10 +94,15 @@ class ApplyWallpaperUseCase @Inject constructor(
         try {
             val request = Request.Builder().url(url).build()
             okHttpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) response.body?.bytes() else null
+                if (response.isSuccessful) {
+                    response.body?.bytes()
+                } else {
+                    Log.w(TAG, "Download HTTP ${response.code} for ${url.take(80)}")
+                    null
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Download failed for $url", e)
+            Log.e(TAG, "Download failed for ${url.take(80)}: $e", e)
             null
         }
 
