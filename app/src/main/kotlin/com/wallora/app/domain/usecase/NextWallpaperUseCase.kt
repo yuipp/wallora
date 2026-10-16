@@ -66,6 +66,9 @@ class NextWallpaperUseCase @Inject constructor(
         private const val MAX_NO_REPEAT_WINDOW = 30
         private const val PAGES_PER_SOURCE = 4
 
+        /** How many different wallpapers to try before giving up when downloads/applies fail. */
+        private const val MAX_APPLY_ATTEMPTS = 4
+
         /**
          * These sources rank results deterministically (popularity / relevance /
          * interestingness) with no per-request randomization. Always starting at page "1"
@@ -110,13 +113,20 @@ class NextWallpaperUseCase @Inject constructor(
                 colorHint = null, category = null, tags = emptyList(),
             )
             settingsRepository.setCurrentWallpaperUrls(prefetched.first, prefetched.second)
-            if (!isLiveWallpaperActive()) {
-                applyWallpaperUseCase(quickWallpaper, target)
+            val prefetchOk = if (!isLiveWallpaperActive()) {
+                val r = applyWallpaperUseCase(quickWallpaper, target)
+                if (r is ApplyResult.Failure) Log.w(TAG, "Pre-fetched wallpaper failed (${r.message}), falling back to normal pick")
+                r is ApplyResult.Success
             } else {
                 repository.addToHistory(quickWallpaper)
+                true
             }
-            scheduleBackgroundPrefetch(playlistMode, quickWallpaper)
-            return@withContext NextWallpaperResult.Applied(quickWallpaper)
+            if (prefetchOk) {
+                scheduleBackgroundPrefetch(playlistMode, quickWallpaper)
+                return@withContext NextWallpaperResult.Applied(quickWallpaper)
+            }
+            // Pre-fetched URL was dead (e.g. an expired Pixabay link) — drop the stale pool too.
+            candidateCache = emptyList()
         }
 
         // Normal path: pick from candidate cache or API
@@ -137,38 +147,54 @@ class NextWallpaperUseCase @Inject constructor(
         }
 
         val recentHistory = repository.getRecentHistoryKeys(MAX_NO_REPEAT_WINDOW)
-        val window = RotationEngine.noRepeatWindow(candidates.size, MAX_NO_REPEAT_WINDOW)
-        val recentKeys = recentHistory.take(window).toSet()
+        val failedKeys = mutableSetOf<String>()
+        var lastFailure = "No usable wallpaper"
 
-        val pickResult = RotationEngine.pickNext(candidates, recentKeys)
-        val wallpaper = when (pickResult) {
-            is PickResult.Empty -> return@withContext NextWallpaperResult.NoPlaylist
-            is PickResult.Found -> {
-                if (pickResult.wasExhausted) Log.d(TAG, "No-repeat window exhausted, resetting")
-                pickResult.wallpaper
+        // A cached candidate can go dead (Pixabay URLs expire after 24h, CDN hiccups, ...).
+        // Instead of failing the tap on the first bad pick, skip it and try another one.
+        for (attempt in 1..MAX_APPLY_ATTEMPTS) {
+            val usable = candidates.filter { it.globalKey !in failedKeys }
+            if (usable.isEmpty()) break
+
+            val window = RotationEngine.noRepeatWindow(usable.size, MAX_NO_REPEAT_WINDOW)
+            val recentKeys = recentHistory.take(window).toSet()
+            val wallpaper = when (val pickResult = RotationEngine.pickNext(usable, recentKeys)) {
+                is PickResult.Empty -> break
+                is PickResult.Found -> {
+                    if (pickResult.wasExhausted) Log.d(TAG, "No-repeat window exhausted, resetting")
+                    pickResult.wallpaper
+                }
             }
-        }
 
-        Log.d(TAG, "Rotating to: ${wallpaper.globalKey}")
-        settingsRepository.setCurrentWallpaperUrls(wallpaper.fullUrl, wallpaper.thumbUrl)
+            Log.d(TAG, "Rotating to: ${wallpaper.globalKey} (attempt $attempt)")
+            settingsRepository.setCurrentWallpaperUrls(wallpaper.fullUrl, wallpaper.thumbUrl)
 
-        if (isLiveWallpaperActive() && target != WallpaperTarget.LOCK) {
-            repository.addToHistory(wallpaper)
-            if (target == WallpaperTarget.BOTH) {
-                applyWallpaperUseCase(wallpaper, WallpaperTarget.LOCK)
-            }
-            scheduleBackgroundPrefetch(playlistMode, wallpaper)
-            return@withContext NextWallpaperResult.Applied(wallpaper)
-        }
-
-        val applyResult = applyWallpaperUseCase(wallpaper, target)
-        return@withContext when (applyResult) {
-            is ApplyResult.Success -> {
+            if (isLiveWallpaperActive() && target != WallpaperTarget.LOCK) {
+                repository.addToHistory(wallpaper)
+                if (target == WallpaperTarget.BOTH) {
+                    applyWallpaperUseCase(wallpaper, WallpaperTarget.LOCK)
+                }
                 scheduleBackgroundPrefetch(playlistMode, wallpaper)
-                NextWallpaperResult.Applied(wallpaper)
+                return@withContext NextWallpaperResult.Applied(wallpaper)
             }
-            is ApplyResult.Failure -> NextWallpaperResult.Failure(applyResult.message)
+
+            when (val applyResult = applyWallpaperUseCase(wallpaper, target)) {
+                is ApplyResult.Success -> {
+                    scheduleBackgroundPrefetch(playlistMode, wallpaper)
+                    return@withContext NextWallpaperResult.Applied(wallpaper)
+                }
+                is ApplyResult.Failure -> {
+                    Log.w(TAG, "Apply failed for ${wallpaper.globalKey} (${wallpaper.sourceId}): ${applyResult.message} — attempt $attempt/$MAX_APPLY_ATTEMPTS")
+                    failedKeys += wallpaper.globalKey
+                    lastFailure = applyResult.message
+                }
+            }
         }
+
+        // Every attempt failed: the cached pool is stale. Drop it so the next tap rebuilds a
+        // fresh one (previously a failed tap never refreshed the cache, so it stayed broken).
+        candidateCache = emptyList()
+        return@withContext NextWallpaperResult.Failure(lastFailure)
     }
 
     /**
