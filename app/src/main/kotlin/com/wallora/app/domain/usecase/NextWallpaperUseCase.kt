@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -68,6 +69,13 @@ class NextWallpaperUseCase @Inject constructor(
 
         /** How many different wallpapers to try before giving up when downloads/applies fail. */
         private const val MAX_APPLY_ATTEMPTS = 4
+
+        /**
+         * Cold-start (quick) fetch queries at most this many randomly chosen topics per source.
+         * With many custom keywords, querying all of them one-by-one through per-request
+         * throttles made a widget tap take ~10 s.
+         */
+        private const val QUICK_MAX_TOPICS = 3
 
         /**
          * These sources rank results deterministically (popularity / relevance /
@@ -308,11 +316,14 @@ class NextWallpaperUseCase @Inject constructor(
             if (customKeywords.isEmpty()) Category.entries.toList() else emptyList()
         }
 
-        val topicCount = (if (categoryTopic.isNotEmpty()) 1 else 0) + customKeywords.size
+        // One "topic" per query: the built-in categories as a single combined browse() call
+        // (keyword = null), plus one search() per custom keyword.
+        val topics: List<String?> =
+            (if (categoryTopic.isNotEmpty()) listOf<String?>(null) else emptyList()) + customKeywords
         val pagesPerTopic = if (quick) {
             1
         } else {
-            (PAGES_PER_SOURCE / topicCount.coerceAtLeast(1)).coerceAtLeast(1)
+            (PAGES_PER_SOURCE / topics.size.coerceAtLeast(1)).coerceAtLeast(1)
         }
 
         // Sources are queried in parallel (each has its own throttled HTTP client), so wall
@@ -324,23 +335,24 @@ class NextWallpaperUseCase @Inject constructor(
                     async {
                         val results = mutableListOf<Wallpaper>()
                         val randomize = source.id in RANDOM_START_SOURCES
+                        val chosen = if (quick) topics.shuffled().take(QUICK_MAX_TOPICS) else topics
 
-                        if (categoryTopic.isNotEmpty()) {
+                        for (keyword in chosen) {
                             try {
                                 fetchTopicPages(results, randomize, pagesPerTopic) { page ->
-                                    source.browse(categories = categoryTopic, page = page)
+                                    if (keyword == null) {
+                                        source.browse(categories = categoryTopic, page = page)
+                                    } else {
+                                        source.search(query = keyword, page = page)
+                                    }
                                 }
+                            } catch (e: IOException) {
+                                // No network / DNS failure: every remaining topic would fail the
+                                // same way (and each wait out its throttle), so skip this source.
+                                Log.w(TAG, "Source ${source.id} unreachable (${e.message}) — skipping its remaining topics")
+                                break
                             } catch (e: Exception) {
-                                Log.w(TAG, "Source ${source.id} failed during rotation category fetch: ${e.message}")
-                            }
-                        }
-                        for (keyword in customKeywords) {
-                            try {
-                                fetchTopicPages(results, randomize, pagesPerTopic) { page ->
-                                    source.search(query = keyword, page = page)
-                                }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Source ${source.id} failed during rotation keyword '$keyword' fetch: ${e.message}")
+                                Log.w(TAG, "Source ${source.id} failed during rotation fetch (topic=${keyword ?: "categories"}): ${e.message}")
                             }
                         }
                         results
