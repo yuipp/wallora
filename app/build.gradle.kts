@@ -25,8 +25,8 @@ android {
         applicationId = "com.wallora.app"
         minSdk = 31
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.68"
+        versionCode = 13
+        versionName = "1.69"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
